@@ -9,6 +9,7 @@ _TEXT   SEGMENT BYTE PUBLIC USE32 'CODE'
         ASSUME  cs:_TEXT
 
         PUBLIC  RcvGP2Call_
+        PUBLIC  MyCompoundToBL_
 
         EXTRN   _GP2_Found              :dword
         EXTRN   _GP2_FoundAdr           :dword
@@ -37,6 +38,8 @@ _TEXT   SEGMENT BYTE PUBLIC USE32 'CODE'
         EXTRN   _pIsHumanFlag           :dword  ; nur keurzzeitig fur CalcSetup gebracuht
         EXTRN   _pUseAdvSetup           :dword
         EXTRN   _pPlayerSetup           :dword
+        EXTRN   _fpAHFFillCompounds     :dword
+        EXTRN   _PerCarTyreCompounds    :dword
 
         EXTRN   _picbufptr              :dword
         EXTRN   _flagfield              :dword
@@ -597,7 +600,19 @@ hprf_end:
 ;-----------------------------------------------------------------------------------
 ; Format: [IDA-code-address], [hookcond ptr], [gp2lap hook function], [gp2lap org hook jump address]
 ;-----------------------------------------------------------------------------------
+;----- 2026 --- per-car compound fill: wrap "call SetSetups??" (re-exec it, then fill) -----
+Hook_FillCompounds proc near
+MyOrgFill:      db      0E8h            ; call SetSetups?? (re-executed; rel32 patched by CondPatchCodeHooks)
+                dd      00000000h
+                pushad
+                call    dword ptr ds:_fpAHFFillCompounds
+                popad
+                retn
+Hook_FillCompounds endp
+
 code_hooks:
+                dd      2d3ddh, _PerCarTyreCompounds, Hook_FillCompounds, MyOrgFill ; per-car compounds (1/2)
+                dd      2d3eah, _PerCarTyreCompounds, Hook_FillCompounds, MyOrgFill ; per-car compounds (2/2)
                 dd      32c5ch, swAlwaysTrue, Hook_EOF,         Hook_EOF        ; end of frame
                 dd      35e26h, swAlwaysTrue, Hook_SOS,         Hook_SOS        ; start of session
                 dd      6b6d6h, swAlwaysTrue, Hook_LOS,         Hook_LOS        ; load of session
@@ -741,6 +756,34 @@ code_locs:
 pFileErrno      dd      0       ; byte**
 fpCheckChecksum dd      0
 
+;-------------------------------------------------------------------
+; 2026 --- per-car tyre compound helper -----------------------------
+; Patched (by AHFAfterGp2Init, when PerCarTyreCompounds=1) over GP2's
+; "mov bl, b_TireType" inside CalcESIsGrip? (IDA 0x30436). On entry
+; ESI = the car being processed; returns that car's compound (0..3) in
+; BL, leaving every other register untouched (caller does "and ebx,0FFh"
+; next). Phase-1 debug source = (carnumber-1) mod 4, so cars visibly run
+; A/B/C/D round-robin; Phase 2 will read the per-car setup record (+8).
+MyCompoundToBL_ proc    near
+                push    eax
+                push    edx
+                movzx   eax,byte ptr [esi+0A6h] ; car_id
+                test    al,80h                  ; human/player car?
+                jnz     Mctb_human
+                and     eax,3Fh                 ; car number 1..40
+                dec     eax                     ; 0-based index
+                mov     edx,30h                 ; sizeof(GP2CSx)
+                mul     edx                     ; eax = index * 0x30
+                add     eax,ds:_pCarSetups      ; eax = &pCarSetups[index]
+                jmp     Mctb_got
+Mctb_human:
+                mov     eax,ds:_pPlayerSetup
+Mctb_got:
+                mov     bl,[eax+8]              ; GP2CSx.compound (0..3)
+                pop     edx
+                pop     eax
+                retn
+MyCompoundToBL_ endp
 
 _TEXT   ENDS
         END

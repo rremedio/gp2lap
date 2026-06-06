@@ -48,6 +48,43 @@ unsigned long InCockpitNow = 0;         // set if in cockpit (race engine, other
 //------ some cfg switches --------------
 unsigned long SupressFastestLap = 0;    // by default: no
 unsigned long atlAcrossTop = 0;    // by default: no
+unsigned long PerCarTyreCompounds = 0;  // 2026: per-car tyre compounds by pit strategy (0=off)
+
+extern void MyCompoundToBL(void);       // asm grip helper in lammcall.asm (patched into CalcESIsGrip?)
+extern GP2CSx *pCarSetups;              // GP2's per-car setup array (osCarSetups), already resolved
+
+//--- 2026 --- read a car's compound (GP2CSx.compound, +8) from its setup record ---
+//--- player uses pPlayerSetup; AI uses pCarSetups[carnum-1]. Returns 0..3, or -1 if unavailable.
+static int CarCompound(unsigned int carId)
+{
+  GP2CSx *s;
+  if (carId & 0x80) s = (GP2CSx *)pPlayerSetup;
+  else s = pCarSetups ? &pCarSetups[(carId & 0x3F) - 1] : NULL;
+  return s ? (s->compound & 3) : -1;
+}
+
+//--- 2026 --- compound -> 'A'..'D' for the at-the-line badge ---
+char CompoundLetter(unsigned int carId)
+{
+  int c = CarCompound(carId);
+  return (char)(c < 0 ? '?' : 'A' + c);
+}
+
+//--- 2026 --- per-session fill: write each car's compound into its setup record (setup+8).
+//--- Runs once per session via Hook_FillCompounds, after SetSetups?? populates setups+strategies.
+//--- Phase 1b: debug round-robin (car N -> (N-1) mod 4); Phase 2 will use the pit-strategy mapping.
+void __near _cdecl AHFFillCompounds(void)
+{
+  unsigned int i;
+  if (pCarSetups)
+    for (i = 0; i < GP2_MAX_NUMCARS; i++)
+      pCarSetups[i].compound = (BYTE)(i & 3);
+  if (pPlayerSetup && pPlayerCar && *pPlayerCar) {
+    unsigned int n = ((BYTE *)(*pPlayerCar))[0xA6] & 0x3F;   /* car_id @ +0xA6 (struct not complete here) */
+    ((GP2CSx *)pPlayerSetup)->compound = (BYTE)((n ? n - 1 : 0) & 3);
+  }
+}
+void (__near _cdecl *fpAHFFillCompounds)(void) = AHFFillCompounds;
 
 #include "timing/gp2struc.h"
 #include "timing/timinpic.h"
@@ -76,6 +113,7 @@ void FrankSoftInit(void)
   if (GetCfgULong("atlLineColor"))        SetRBehindCol2(*GetCfgULong("atlLineColor"));
   if (GetCfgULong("atlAcrossTop"))        atlAcrossTop = *GetCfgULong("atlAcrossTop");
   if (GetCfgULong("atlMarkTopX"))         SetLaptimeTopCount(*GetCfgULong("atlMarkTopX"));
+  if (GetCfgULong("PerCarTyreCompounds")) PerCarTyreCompounds = *GetCfgULong("PerCarTyreCompounds");
   if (GetCfgULong("logDebugScreenLines")) VisLogSetStrCount(*GetCfgULong("logDebugScreenLines"));
   if (GetCfgULong("DrawLines"))           SetCopySvgaLinesNum(*GetCfgULong("DrawLines"));
 
@@ -186,6 +224,17 @@ void __near _cdecl AHFAfterGp2Init(void)
   //if ( GetCfgULong("SplitsInRace") && *GetCfgULong("SplitsInRace") )
   //--- 11/99 Ignore, because ATLBehind doesn't work properly with Splits diabled
   memset(IDAtoFlat(0x1611d), 0x90, 13);
+
+  //--- 2026 --- per-car tyre compounds (Phase 1): route CalcESIsGrip?'s compound
+  //--- read through MyCompoundToBL so each car uses its own compound for grip & wear.
+  //--- Replaces "mov bl, b_TireType" (6 bytes @ IDA 0x30436) with "call MyCompoundToBL" + NOP.
+  if (PerCarTyreCompounds) {
+    unsigned char *p = (unsigned char *)IDAtoFlat(0x30436);
+    *p = 0xE8;                                                       // call rel32
+    *(long *)(p + 1) = (long)((ulong)MyCompoundToBL - (ulong)(p + 5));
+    p[5] = 0x90;                                                     // NOP (displaced 6th byte)
+    LogLine("- PerCarTyreCompounds: ON (compounds are now per-car)\n");
+  }
 
 #ifdef TEST
   //--- 10/98 --- dump the Strings ---------

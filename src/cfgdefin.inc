@@ -19,6 +19,9 @@ itemdef items[] = {         // item names are case insensitive
     NULL, ULONGTYPE,  "atlAcrossTop",
     NULL, ULONGTYPE,  "atlMarkTopX",
 
+    //[TYRES]
+    NULL, ULONGTYPE,  "PerCarTyreCompounds",
+
     //[TRACK MAP]
     NULL, ULONGTYPE,  "mapTrackColor",
     NULL, ULONGTYPE,  "mapHAlign",

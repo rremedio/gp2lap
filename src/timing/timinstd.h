@@ -1,6 +1,10 @@
 #ifndef _TIMINSTD_H
 #define _TIMINSTD_H
 
+//--- 2026: per-car tyre compounds (defined in timing/convert.inc) ---
+extern unsigned long PerCarTyreCompounds;   // cfg switch: 0=off, 1=per-car compounds
+char CompoundLetter(unsigned int carId);    // compound 0..3 -> 'A'..'D' for the ATL badge
+
 
 //--------------------------------------------------------
 //------ constants ---------------------------------------

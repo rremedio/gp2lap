@@ -678,7 +678,15 @@ PitsButOther:   popad
 
 NoPitlane:      and     byte ptr [esi+0ACh],7Fh
 
-MyOrgFESJmp:    db      0E9h    ; jmp relative
+                ; FIX (pit-lane S/F freeze under DOSBox on Linux): this was "MyOrgFESJmp:",
+                ; a DATA label, so the "jmp MyOrgFESJmp" below assembled (wasm and masm alike)
+                ; as an INDIRECT jump -- jmp dword ptr [MyOrgFESJmp] -- which read the stub's own
+                ; 0E9h+rel32 bytes as a pointer and jumped to garbage. That address is unmapped
+                ; under DOSBox on Linux -> exception 06h freeze whenever a car crossed S/F in the
+                ; pit lane; it merely lands on mapped memory under Windows DOSBox, so it survives
+                ; there. "label near" makes this a CODE label -> the jump below is relative.
+MyOrgFESJmp     label   near
+                db      0E9h    ; jmp relative
                 dd      00000000h
                 ;jmp    dword ptr ds:MyFESOrgPtr
 

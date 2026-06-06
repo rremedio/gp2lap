@@ -1,0 +1,39 @@
+src/timing/rlaptime.c
+  s_740125fb49b74d::t_f74a6892768342 87-90
+src/timing/rbehind.c
+  s_740125fb49b74d::t_6167af7324dd10 80-83
+src/timing/convert.inc
+  s_740125fb49b74d::t_8b8b4ffddf1dd2 116
+  s_740125fb49b74d::t_7e64fe46c64c59 53-54,56-66,68-76,78-82,84-85,87
+  s_740125fb49b74d::t_528d83c67fc7d4 51-52,55,67,77,86
+  s_740125fb49b74d::t_bca0910dbc1a18 228-238
+  s_740125fb49b74d::t_d4deedf2da9cad 83
+src/cfgdefin.inc
+  s_740125fb49b74d::t_e9098de60c94b4 22-24
+src/lammcall.asm
+  s_740125fb49b74d::t_5cb7337e10b234 12
+  s_740125fb49b74d::t_895bb895e2636a 603-612,614-615
+  s_740125fb49b74d::t_9919c74201a95b 769,771-783
+  s_740125fb49b74d::t_d96e175a5f28fb 41-42
+  s_740125fb49b74d::t_68dfb42882f763 759-768,770,784-786
+build/gp2lap.cfg
+  s_740125fb49b74d::t_a954bb52eb0348 10-13
+src/timing/timinstd.h
+  s_740125fb49b74d::t_fb1a4a3d612966 4-7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "c2e7a7c14a5e903b7b96eb2b21ddc42df205dad7",
+  "prompts": {},
+  "sessions": {
+    "s_740125fb49b74d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "372c5c91-8458-4930-a40c-0c08877321f5",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Roberto Remedio <rremedio@gmail.com>"
+    }
+  }
+}

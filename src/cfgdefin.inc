@@ -21,6 +21,7 @@ itemdef items[] = {         // item names are case insensitive
 
     //[TYRES]
     NULL, ULONGTYPE,  "PerCarTyreCompounds",
+    NULL, ULONGTYPE,  "SoftTyresInQuali",
 
     //[TRACK MAP]
     NULL, ULONGTYPE,  "mapTrackColor",

@@ -49,6 +49,7 @@ unsigned long InCockpitNow = 0;         // set if in cockpit (race engine, other
 unsigned long SupressFastestLap = 0;    // by default: no
 unsigned long atlAcrossTop = 0;    // by default: no
 unsigned long PerCarTyreCompounds = 0;  // 2026: per-car tyre compounds by pit strategy (0=off)
+unsigned long SoftTyresInQuali = 1;     // 2026: in qualifying, everyone runs D (softest). 0 = stock
 
 extern void MyCompoundToBL(void);       // asm grip helper in lammcall.asm (patched into CalcESIsGrip?)
 extern GP2CSx *pCarSetups;              // GP2's per-car setup array (osCarSetups), already resolved
@@ -70,19 +71,62 @@ char CompoundLetter(unsigned int carId)
   return (char)(c < 0 ? '?' : 'A' + c);
 }
 
-//--- 2026 --- per-session fill: write each car's compound into its setup record (setup+8).
-//--- Runs once per session via Hook_FillCompounds, after SetSetups?? populates setups+strategies.
-//--- Phase 1b: debug round-robin (car N -> (N-1) mod 4); Phase 2 will use the pit-strategy mapping.
+//--- 2026 --- per-session fill: assign each car a compound and write it to its setup record (+8).
+//--- Runs once per session via Hook_FillCompounds (after SetSetups?? populates setups + strategies).
+//---
+//--- Qualifying (RaceMode bit7 clear): SoftTyresInQuali -> everyone runs D (3); else the track base.
+//--- Race: derive from the pit-strategy mix. Cars are bucketed by planned stop count
+//--- (GP2CSx.num_pitstops, +0xA); buckets map to CONSECUTIVE compounds, fewer stops = harder; the run
+//--- is positioned so the MOST-POPULATED bucket lands on the track base compound, then clamped to A..D.
+//--- (Reproduces the design examples; the player follows their own chosen strategy. See
+//--- docs/gp2lap/per-car-tyre-compounds.md.)
 void __near _cdecl AHFFillCompounds(void)
 {
-  unsigned int i;
-  if (pCarSetups)
-    for (i = 0; i < GP2_MAX_NUMCARS; i++)
-      pCarSetups[i].compound = (BYTE)(i & 3);
-  if (pPlayerSetup && pPlayerCar && *pPlayerCar) {
-    unsigned int n = ((BYTE *)(*pPlayerCar))[0xA6] & 0x3F;   /* car_id @ +0xA6 (struct not complete here) */
-    ((GP2CSx *)pPlayerSetup)->compound = (BYTE)((n ? n - 1 : 0) & 3);
+  int i, s, k, nb, mp, base, ncars, isRace, q, sh, c;
+  int present[4], bstop[4], bcount[4], comp[4], stop2comp[4];
+  GP2CSx *psetup;
+
+  if (!pCarSetups) return;
+  psetup = (GP2CSx *)pPlayerSetup;
+  isRace = (GP2_RaceMode && (*GP2_RaceMode & 0x80)) ? 1 : 0;
+  base   = pCarSetups[0].compound & 3;        /* track's compound (uniform before we overwrite it) */
+
+  if (!isRace) {                              /* qualifying / practice */
+    q = SoftTyresInQuali ? 3 : base;          /* soft = D, else stock single compound */
+    for (i = 0; i < GP2_MAX_NUMCARS; i++) pCarSetups[i].compound = (BYTE)q;
+    if (psetup) psetup->compound = (BYTE)q;
+    return;
   }
+
+  /* --- race: pit-strategy -> compound --- */
+  ncars = GP2_NumStarters ? (int)*GP2_NumStarters : 26;
+  if (ncars < 1) ncars = 1;
+  if (ncars > GP2_MAX_NUMCARS) ncars = GP2_MAX_NUMCARS;
+
+  for (s = 0; s < 4; s++) present[s] = 0;
+  for (i = 0; i < ncars; i++) present[pCarSetups[i].num_pitstops & 3]++;
+
+  nb = 0;                                      /* distinct stop-counts present, ascending */
+  for (s = 0; s < 4; s++) if (present[s]) { bstop[nb] = s; bcount[nb] = present[s]; nb++; }
+  if (nb == 0) return;
+
+  mp = 0;                                      /* most-populated bucket (ties -> fewest stops) */
+  for (k = 1; k < nb; k++) if (bcount[k] > bcount[mp]) mp = k;
+
+  for (k = 0; k < nb; k++) comp[k] = base + (k - mp);   /* fewer stops harder, anchored at base */
+  if (comp[0] < 0)      { sh = -comp[0];      for (k = 0; k < nb; k++) comp[k] += sh; }  /* clamp run */
+  if (comp[nb-1] > 3)   { sh = comp[nb-1] - 3; for (k = 0; k < nb; k++) comp[k] -= sh; } /* into A..D */
+
+  for (s = 0; s < 4; s++) stop2comp[s] = base;
+  for (k = 0; k < nb; k++) {
+    c = comp[k]; if (c < 0) c = 0; if (c > 3) c = 3;
+    stop2comp[bstop[k]] = c;
+  }
+
+  for (i = 0; i < GP2_MAX_NUMCARS; i++)
+    pCarSetups[i].compound = (BYTE)stop2comp[pCarSetups[i].num_pitstops & 3];
+  if (psetup)
+    psetup->compound = (BYTE)stop2comp[psetup->num_pitstops & 3];
 }
 void (__near _cdecl *fpAHFFillCompounds)(void) = AHFFillCompounds;
 
@@ -114,6 +158,7 @@ void FrankSoftInit(void)
   if (GetCfgULong("atlAcrossTop"))        atlAcrossTop = *GetCfgULong("atlAcrossTop");
   if (GetCfgULong("atlMarkTopX"))         SetLaptimeTopCount(*GetCfgULong("atlMarkTopX"));
   if (GetCfgULong("PerCarTyreCompounds")) PerCarTyreCompounds = *GetCfgULong("PerCarTyreCompounds");
+  if (GetCfgULong("SoftTyresInQuali"))    SoftTyresInQuali = *GetCfgULong("SoftTyresInQuali");
   if (GetCfgULong("logDebugScreenLines")) VisLogSetStrCount(*GetCfgULong("logDebugScreenLines"));
   if (GetCfgULong("DrawLines"))           SetCopySvgaLinesNum(*GetCfgULong("DrawLines"));
 

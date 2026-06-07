@@ -1,0 +1,20 @@
+src/timing/convert.inc
+  s_740125fb49b74d::t_586d77bfeb84ab 435-438
+  s_740125fb49b74d::t_9cc7de3b73197a 382
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "824422e354bc4a3b4999493926c9232fbcb4d94c",
+  "prompts": {},
+  "sessions": {
+    "s_740125fb49b74d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "372c5c91-8458-4930-a40c-0c08877321f5",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Roberto Remedio <rremedio@gmail.com>"
+    }
+  }
+}

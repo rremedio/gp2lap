@@ -53,6 +53,7 @@ unsigned long SoftTyresInQuali = 1;     // 2026: in qualifying, everyone runs D 
 unsigned long ShowTyreCompoundBadge = 1;// 2026: show the (X) compound badge; only if PerCarTyreCompounds=1 (0=blind)
 unsigned long JamTextureExtraMB = 0;    // 2026: ADD N MB to the JAM texture buffer over stock ~2.84MB (0 = stock)
 unsigned long ExtraTrackSegments = 0;   // 2026: ADD N track+pit segments over stock 1600 (0 = stock ~7km limit)
+unsigned long ExtraTrackFileKB = 0;     // 2026: ADD N KB to the track file/data buffers over stock ~62KB (0 = stock)
 static unsigned long s_baseCsum  = 0;   // 2026: track checksum the base below was captured for
 static int           s_trackBase = -1;  // 2026: genuine track base compound (0..3), -1 = not yet
 
@@ -192,6 +193,7 @@ void FrankSoftInit(void)
   if (GetCfgULong("ShowTyreCompoundBadge")) ShowTyreCompoundBadge = *GetCfgULong("ShowTyreCompoundBadge");
   if (GetCfgULong("JamTextureExtraMB"))     JamTextureExtraMB = *GetCfgULong("JamTextureExtraMB");
   if (GetCfgULong("ExtraTrackSegments"))    ExtraTrackSegments = *GetCfgULong("ExtraTrackSegments");
+  if (GetCfgULong("ExtraTrackFileKB"))      ExtraTrackFileKB = *GetCfgULong("ExtraTrackFileKB");
   if (GetCfgULong("logDebugScreenLines")) VisLogSetStrCount(*GetCfgULong("logDebugScreenLines"));
   if (GetCfgULong("DrawLines"))           SetCopySvgaLinesNum(*GetCfgULong("DrawLines"));
 
@@ -439,6 +441,110 @@ void __near _cdecl AHFAfterGp2Init(void)
           sprintf(strbuf, "- ExtraTrackSegments: +%lu -> %lu track+pit segs; buffer %lu KB @ 0x%08lX\n",
                   extra, newN, bytes >> 10, (unsigned long)bb);
           LogLine(strbuf);
+        }
+      }
+    }
+  }
+
+  //--- 2026 --- lift the ~62KB track file/data limit. GP2 reads the file into t_TrkReadbuffer
+  //--- (read capped at 62000) and copies T_TrackDataSize bytes into t_LoadedTrkData (62004 B),
+  //--- which abuts the car 3D model (o_interobj00) -> a bigger track overruns it. We relocate both
+  //--- buffers to larger allocations and repoint EVERY reference by value via a whole-image scan
+  //--- (GP2 is a multi-object LE image with differing code/data deltas, so a single IDAtoFlat or
+  //--- data-delta scan misses refs in other objects). Three non-obvious aliases the scan must catch:
+  //---   * the static t_TrkReadbuffer base pointer at IDA 0xF9CC0,
+  //---   * pTrkHdrStart = t_TrkReadbuffer + 0x1000 (IDA 0xF9CC4, the "real header" pointer),
+  //---   * t_interobjs (IDA 0xD9FDC): the 17 default-object pointers sitting EXACTLY 0x44 B before
+  //---     t_LoadedTrkData. The object render loop walks one array t_interobjs[0..NumIntObjects],
+  //---     so indices >=17 alias straight into t_LoadedTrkData's file-object table. We therefore put
+  //---     t_interobjs at the front of the new buffer (newLoaded = bL+0x44), copy the 17 default
+  //---     pointers, and repoint t_interobjs refs too -- otherwise the render reads the file pointers
+  //---     from the STALE old buffer -> missing objects + a wild byte-string walk off RAM.
+  //--- Also raises the read cap (0x93DF8). See docs/track-length-limit.md.
+  if (ExtraTrackFileKB) {
+    static const unsigned long loadedRefs[] = {
+      0x731A5UL, 0x731B2UL, 0x731D6UL, 0x731E6UL, 0x731F1UL,
+      0x73203UL, 0x7322FUL, 0x73240UL, 0x73245UL, 0x77017UL
+    };
+    static const unsigned long readRefs[] = { 0x7AE03UL, 0x93DF3UL, 0x93E04UL, 0x93E14UL };
+    unsigned long extra, cap, oldLoaded, oldRead, newLoaded, newRead, pstat;
+    unsigned long oldInterobjs, newInterobjs;   /* t_interobjs (17 default-obj ptrs) sits 0x44 B before t_LoadedTrkData */
+    unsigned char *bL, *bR, *c1, *c2;
+    int i, off, ok;
+
+    extra = ExtraTrackFileKB;
+    if (extra > 256) extra = 256;                 /* clamp: <= ~320 KB total */
+    cap = 0x10000UL + extra * 1024UL;             /* new read/file cap = 64KB + N KB (above the stock/community cap) */
+
+    oldLoaded = *(unsigned long *)(IDAtoFlat(0x731D6) + 1);  /* mov edi, offset t_LoadedTrkData (BF,+1) */
+    oldRead   = *(unsigned long *)(IDAtoFlat(0x93DF3) + 1);  /* mov edi, offset t_TrkReadbuffer  (BF,+1) */
+    c1 = (unsigned char *)IDAtoFlat(0x93DF8);     /* live read cap: mov ecx,imm32 (B9, imm@+1) -- may be pre-patched */
+    c2 = (unsigned char *)IDAtoFlat(0x731CE);     /* dead cmp ecx,imm32 (81 F9, imm@+2) */
+    if (oldLoaded <= 0x10000UL || oldRead <= 0x10000UL) {
+      LogLine("- ExtraTrackFileKB: bootstrap read failed; DISABLED\n");
+    } else {
+      bL = (unsigned char *)malloc(cap + 0x2000UL + 0x44UL);   /* data buffer; +0x44 front holds t_interobjs */
+      bR = (unsigned char *)malloc(cap + 0x2000UL);            /* file read buffer (replaces t_TrkReadbuffer) */
+      if (!bL || !bR) {
+        if (bL) free(bL);
+        if (bR) free(bR);
+        sprintf(strbuf, "- ExtraTrackFileKB: alloc FAILED (%lu KB x2); stock ~62KB\n", (cap + 0x2000UL) >> 10);
+        LogLine(strbuf);
+      } else {
+        newInterobjs = (unsigned long)bL;          /* t_interobjs goes at the front... */
+        newLoaded    = (unsigned long)bL + 0x44UL; /* ...so t_interobjs+0x44 == t_LoadedTrkData, preserving the */
+        oldInterobjs = oldLoaded - 0x44UL;         /* one-array (17 default + N file) object-pointer adjacency  */
+        newRead   = (unsigned long)bR;
+        pstat     = (oldRead - 0x3B9AD0UL) + 0xF9CC0UL;  /* runtime addr of the static t_TrkReadbuffer ptr */
+        ok = 1;                                          /* verify pass (all-or-nothing) */
+        for (i = 0; i < 10 && ok; i++) if (SegFindImm(loadedRefs[i], oldLoaded) < 0) ok = 0;
+        for (i = 0; i < 4  && ok; i++) if (SegFindImm(readRefs[i],   oldRead)   < 0) ok = 0;
+        if (ok && *(unsigned long *)pstat != oldRead) ok = 0;
+        if (ok && (c1[0] != 0xB9 || c2[0] != 0x81 || c2[1] != 0xF9)) ok = 0;  /* cap opcodes (value may be pre-patched) */
+        if (!ok) {
+          free(bL); free(bR);
+          LogLine("- ExtraTrackFileKB: site verify failed; DISABLED (no patch)\n");
+        } else {
+          for (i = 0; i < 10; i++) { off = SegFindImm(loadedRefs[i], oldLoaded); *(unsigned long *)(IDAtoFlat(loadedRefs[i]) + off) = newLoaded; }
+          for (i = 0; i < 4;  i++) { off = SegFindImm(readRefs[i],   oldRead);   *(unsigned long *)(IDAtoFlat(readRefs[i])   + off) = newRead;   }
+          *(unsigned long *)pstat = newRead;             /* static t_TrkReadbuffer pointer @0xF9CC0 */
+          *(unsigned long *)(c1 + 1) = cap;              /* raise the live read cap (0x93DF8) */
+          *(unsigned long *)(c2 + 2) = cap;              /* and the dead cmp (0x731CE) for consistency */
+          memcpy((void *)newInterobjs, (void *)oldInterobjs, 0x44UL);  /* preserve the 17 default-object pointers */
+          memset((void *)newLoaded, 0, cap + 0x2000UL);                /* zero only the track-data region */
+          memset(bR, 0, cap + 0x2000UL);
+          sprintf(strbuf, "- ExtraTrackFileKB: +%lu KB -> cap %lu KB; read@0x%08lX loaded@0x%08lX interobjs@0x%08lX\n",
+                  extra, cap >> 10, newRead, newLoaded, newInterobjs);
+          LogLine(strbuf);
+          /* --- whole-image self-finding relocation. GP2 is a multi-object LE image: code lives in
+             more than one LE object (the deep-load track compiler that crashed is in a different
+             object than the loader), and the buffers + their loader-fixup'd immediate references are
+             spread across objects at differing runtime deltas. So IDAtoFlat (object-1 code delta) and
+             a data-delta scan each cover only part of the image and missed the real reference. Instead
+             scan the whole contiguous loaded image BY VALUE (delta-independent): from the object-1 code
+             start up to the read buffer, repoint every dword aimed at a buffer base, the t_interobjs
+             array (0x44-wide window, just below t_LoadedTrkData), or the read-buffer +0x1000/+0x1020
+             header pointer. Buffer bodies are skipped; exact-value match keeps false positives ~0
+             (6 MB x ~e-9). The 14 known refs + 0xF9CC0 are already newLoaded/newRead so won't re-match. */
+          {
+            unsigned long flatLo  = (unsigned long)IDAtoFlat(0x10000); /* object-1 code start (mapped) */
+            unsigned long flatHi  = oldRead;                           /* read buffer is last; all refs precede it */
+            unsigned long lbodyLo = oldLoaded, lbodyHi = oldLoaded + 0xF234UL; /* loaded-buffer body to skip */
+            unsigned long p, v;
+            int hL = 0, hR = 0, hI = 0;
+            for (p = flatLo; p < flatHi; p++) {
+              if (p >= lbodyLo && p < lbodyHi) { p = lbodyHi - 1; continue; }  /* skip loaded-buf body */
+              v = *(unsigned long *)p;
+              if      (v == oldLoaded)            { *(unsigned long *)p = newLoaded; hL++; }
+              else if (v - oldInterobjs < 0x44UL) { *(unsigned long *)p = newInterobjs + (v - oldInterobjs); hI++; }
+              else if (v == oldRead)              { *(unsigned long *)p = newRead; hR++; }
+              else if (v == oldRead + 0x1000UL)   { *(unsigned long *)p = newRead + 0x1000UL; hR++; }  /* pTrkHdrStart-style header alias */
+              else if (v == oldRead + 0x1020UL)   { *(unsigned long *)p = newRead + 0x1020UL; hR++; }
+            }
+            sprintf(strbuf, "  img-scan: %d loaded + %d interobjs + %d read ref(s) repointed (flat 0x%08lX..0x%08lX)\n",
+                    hL, hI, hR, flatLo, flatHi);
+            LogLine(strbuf);
+          }
         }
       }
     }

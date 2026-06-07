@@ -148,16 +148,18 @@ void __near _cdecl AHFFillCompounds(void)
     }
     strcat(strbuf, "\n"); LogLine(strbuf);
   }
-  else if (mode & 0x40) {
-    /* --- QUALIFYING: everyone on D (softest) when enabled, else the stock base. --- */
+  else if ((mode & 0x40) || mode == 0x01 || mode == 0x03) {
+    /* --- QUALIFYING (0x40), or Friday(0x01)/Saturday(0x03) free practice: follow   --- */
+    /* --- the qualifying tyre rule (D when SoftTyresInQuali, else the stock base).   --- */
+    /* --- Warm-up (0x02) and unlimited practice (0x00) fall through unchanged below. --- */
     q = SoftTyresInQuali ? 3 : base;
     for (i = 0; i < GP2_MAX_NUMCARS; i++) pCarSetups[i].compound = (BYTE)q;
     if (psetup) psetup->compound = (BYTE)q;
-    sprintf(strbuf, "- PerCarTyre QUALI: all=%c (base=%c)\n", (char)('A' + q), (char)('A' + base));
+    sprintf(strbuf, "- PerCarTyre QUALI/FP(mode=0x%02X): all=%c (base=%c)\n", (unsigned)mode, (char)('A' + q), (char)('A' + base));
     LogLine(strbuf);
   }
   else {
-    /* --- Standalone practice (0x00), warm-up, free practice, anything else: leave --- */
+    /* --- Unlimited practice (0x00), pre-race warm-up (0x02), anything else: leave --- */
     /* --- every car on the stock single compound (track base) -> behaves like stock. -- */
     for (i = 0; i < GP2_MAX_NUMCARS; i++) pCarSetups[i].compound = (BYTE)base;
     if (psetup) psetup->compound = (BYTE)base;

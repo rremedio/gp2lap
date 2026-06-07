@@ -51,6 +51,7 @@ unsigned long atlAcrossTop = 0;    // by default: no
 unsigned long PerCarTyreCompounds = 0;  // 2026: per-car tyre compounds by pit strategy (0=off)
 unsigned long SoftTyresInQuali = 1;     // 2026: in qualifying, everyone runs D (softest). 0 = stock
 unsigned long ShowTyreCompoundBadge = 1;// 2026: show the (X) compound badge; only if PerCarTyreCompounds=1 (0=blind)
+unsigned long JamTextureExtraMB = 0;    // 2026: ADD N MB to the JAM texture buffer over stock ~2.84MB (0 = stock)
 static unsigned long s_baseCsum  = 0;   // 2026: track checksum the base below was captured for
 static int           s_trackBase = -1;  // 2026: genuine track base compound (0..3), -1 = not yet
 
@@ -188,6 +189,7 @@ void FrankSoftInit(void)
   if (GetCfgULong("PerCarTyreCompounds")) PerCarTyreCompounds = *GetCfgULong("PerCarTyreCompounds");
   if (GetCfgULong("SoftTyresInQuali"))    SoftTyresInQuali = *GetCfgULong("SoftTyresInQuali");
   if (GetCfgULong("ShowTyreCompoundBadge")) ShowTyreCompoundBadge = *GetCfgULong("ShowTyreCompoundBadge");
+  if (GetCfgULong("JamTextureExtraMB"))     JamTextureExtraMB = *GetCfgULong("JamTextureExtraMB");
   if (GetCfgULong("logDebugScreenLines")) VisLogSetStrCount(*GetCfgULong("logDebugScreenLines"));
   if (GetCfgULong("DrawLines"))           SetCopySvgaLinesNum(*GetCfgULong("DrawLines"));
 
@@ -308,6 +310,32 @@ void __near _cdecl AHFAfterGp2Init(void)
     *(long *)(p + 1) = (long)((ulong)MyCompoundToBL - (ulong)(p + 5));
     p[5] = 0x90;                                                     // NOP (displaced 6th byte)
     LogLine("- PerCarTyreCompounds: ON (compounds are now per-car)\n");
+  }
+
+  //--- 2026 --- enlarge the JAM texture accumulator (lift the ~2.84MB image-area limit).
+  //--- The loader stages JAM image bytes from d_vbufferptr, and sub_70B07 rebases every entry's
+  //--- image pointer by +d_vbufferptr, so repointing d_vbufferptr (init imm @0x70ACB) and raising
+  //--- the image guard (cmp imm @0x70C23) moves the whole texture pipeline into our buffer; the
+  //--- 320x200 screen buffer (v320_640_buf) and the palette buffer are untouched.
+  //--- See docs/jam-buffer-expansion-plan.md.
+  if (JamTextureExtraMB) {
+    unsigned long extra = JamTextureExtraMB;
+    unsigned long size;
+    void *jbuf;
+    if (extra > 61) extra = 61;                       /* sanity clamp (well under DOS/4GW's 64MB) */
+    size = 0x2D8070UL + extra * 0x100000UL;           /* stock ~2.84MB + N MB */
+    jbuf = malloc(size);
+    if (jbuf) {
+      unsigned long base = (unsigned long)jbuf;
+      *(unsigned long *)(IDAtoFlat(0x70ACB) + 6) = base;          /* d_vbufferptr init base */
+      *(unsigned long *)(IDAtoFlat(0x70C23) + 1) = base + size;   /* image-area guard end   */
+      sprintf(strbuf, "- JamTextureBuffer: stock +%lu MB = %lu KB @ 0x%08lX..0x%08lX\n",
+              extra, size >> 10, base, base + size);
+      LogLine(strbuf);
+    } else {
+      sprintf(strbuf, "- JamTextureBuffer: alloc of stock +%lu MB FAILED; staying on stock buffer\n", extra);
+      LogLine(strbuf);
+    }
   }
 
 #ifdef TEST

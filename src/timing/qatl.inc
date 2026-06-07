@@ -130,9 +130,9 @@ char *Pos2String(unsigned char carpos)
 // 2 sofort raus & auf besttime kurs: section werden nicht rot gekennz.
 // 3 rote zeiten, werden gegen oppcar die -:--.--- haben nur schwarz angezeigt (aehnlich prob 2)
 void UpdateLapStat(struct singlecarstruct *cariv, unsigned long boardmode)
-/* �bergabe: cariv = das CarInView (auf das sich alles bezieht)
+/* Input: cariv = the CarInView (which everything refers to)
              boardmode == [QATL_SECTORS, QATL_SECDIFF]
-   R�ckgabe: nix
+   Returns: nothing
 */
 {
   static struct singlecarstruct *leader, *oppcar;

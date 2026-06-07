@@ -13,7 +13,7 @@ void OnATLReDraw(void);
 
 
 //---- Zusatzinfos fuer ATL pages Verwaltung ----
-unsigned long FIRSTPOS = 0;  // f�r Anzeige in der Tabelle
+unsigned long FIRSTPOS = 0;  // for display in the table
 unsigned long LASTPOS = 4;
 
 //---- always order-indexed!!! ----
@@ -233,7 +233,7 @@ void InitMyTiming(void)
 #pragma aux AHFCrossingSplit parm [EAX] [ESI] caller;
 void __near _cdecl AHFCrossingSplit( unsigned long section,
                                       struct singlecarstruct *actcar )
-// �bergabe: section: (0 == line, 1 == split1, 2 == split2)
+// Input: section: (0 == line, 1 == split1, 2 == split2)
 {
   static unsigned long ii, p;
   static unsigned char carpos;

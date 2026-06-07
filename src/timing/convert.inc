@@ -52,6 +52,7 @@ unsigned long PerCarTyreCompounds = 0;  // 2026: per-car tyre compounds by pit s
 unsigned long SoftTyresInQuali = 1;     // 2026: in qualifying, everyone runs D (softest). 0 = stock
 unsigned long ShowTyreCompoundBadge = 1;// 2026: show the (X) compound badge; only if PerCarTyreCompounds=1 (0=blind)
 unsigned long JamTextureExtraMB = 0;    // 2026: ADD N MB to the JAM texture buffer over stock ~2.84MB (0 = stock)
+unsigned long ExtraTrackSegments = 0;   // 2026: ADD N track+pit segments over stock 1600 (0 = stock ~7km limit)
 static unsigned long s_baseCsum  = 0;   // 2026: track checksum the base below was captured for
 static int           s_trackBase = -1;  // 2026: genuine track base compound (0..3), -1 = not yet
 
@@ -190,6 +191,7 @@ void FrankSoftInit(void)
   if (GetCfgULong("SoftTyresInQuali"))    SoftTyresInQuali = *GetCfgULong("SoftTyresInQuali");
   if (GetCfgULong("ShowTyreCompoundBadge")) ShowTyreCompoundBadge = *GetCfgULong("ShowTyreCompoundBadge");
   if (GetCfgULong("JamTextureExtraMB"))     JamTextureExtraMB = *GetCfgULong("JamTextureExtraMB");
+  if (GetCfgULong("ExtraTrackSegments"))    ExtraTrackSegments = *GetCfgULong("ExtraTrackSegments");
   if (GetCfgULong("logDebugScreenLines")) VisLogSetStrCount(*GetCfgULong("logDebugScreenLines"));
   if (GetCfgULong("DrawLines"))           SetCopySvgaLinesNum(*GetCfgULong("DrawLines"));
 
@@ -253,6 +255,17 @@ void FrankSoftDone(void)
 } // FrankSoftDone()
 
 //-----------------------------------------------------------------------
+
+//--- 2026 --- locate a 4-byte immediate by VALUE within an instruction (encoding-agnostic),
+//--- used by the ExtraTrackSegments relocation. Returns the byte offset (1..6) or -1.
+static int SegFindImm(unsigned long ida, unsigned long oldv)
+{
+  unsigned char *p = (unsigned char *)IDAtoFlat(ida);
+  int o;
+  for (o = 1; o <= 6; o++)
+    if (*(unsigned long *)(p + o) == oldv) return o;
+  return -1;
+}
 
 void __near _cdecl AHFAfterGp2Init(void)
 // called after general gp2 init
@@ -335,6 +348,94 @@ void __near _cdecl AHFAfterGp2Init(void)
     } else {
       sprintf(strbuf, "- JamTextureBuffer: alloc of stock +%lu MB FAILED; staying on stock buffer\n", extra);
       LogLine(strbuf);
+    }
+  }
+
+  //--- 2026 --- lift the ~1600-segment (track+pit, ~7km) limit by relocating the segment buffer
+  //--- to a larger allocation. The buffer (t_TrackSegs..t_LastSegSpace, followed by the shade LUT)
+  //--- is reached by ~51 absolute code immediates; runtime pointers (pFirstSeg*, car.curSeg, the
+  //--- off_0_CADC0 lookup table) are computed from it and follow automatically. We repoint the
+  //--- base/pre/end refs by VALUE (encoding-agnostic) with an ALL-OR-NOTHING verify pass: if any
+  //--- site doesn't hold its expected old value, disable rather than half-patch (no corruption).
+  //--- Site lists reconciled from both listings; WriteHotLap's raw 0x16E362 is deliberately excluded.
+  //--- See docs/track-length-limit.md.
+  if (ExtraTrackSegments) {
+    static const unsigned long segBase[] = {
+      0x14177UL, 0x1417EUL, 0x144DDUL, 0x14512UL, 0x1456AUL, 0x1459FUL, 0x1FE9DUL, 0x2DF12UL,
+      0x2DFD7UL, 0x4CE73UL, 0x4CF41UL, 0x4F255UL, 0x4F522UL, 0x4F830UL, 0x4FB19UL, 0x4FE33UL,
+      0x4FF26UL, 0x5065BUL, 0x506B2UL, 0x51C0DUL, 0x52AAFUL, 0x55980UL, 0x55AAEUL, 0x63F5BUL,
+      0x63F6AUL, 0x65C5BUL, 0x737C8UL, 0x73804UL, 0x73B13UL, 0x7433EUL, 0x74C15UL, 0x765D8UL,
+      0x770FBUL, 0x77128UL, 0x77443UL, 0x774AAUL, 0x774C0UL, 0x774D6UL, 0x774FFUL, 0x7751AUL,
+      0x7762BUL, 0x77EF1UL, 0x78224UL
+    };
+    static const unsigned long segPre[]     = { 0x732B0UL, 0x7346EUL, 0x777D3UL };
+    static const unsigned long segEnd[]      = { 0x73787UL, 0x738CFUL, 0x77148UL, 0x77211UL };
+    static const unsigned long segEndPlus[]  = { 0x732B9UL };
+    const unsigned long *grp[4];
+    unsigned long ov[4], nv[4];
+    int cnt[4];
+    unsigned long extra, newN, oldBase, newBase, bytes;
+    unsigned char *bb;
+    unsigned long ddelta;
+    unsigned long *pfss, *pfsp;
+    int g, i, off, ok;
+
+    extra = ExtraTrackSegments;
+    if (extra > 6400) extra = 6400;                /* clamp: newN <= 8000 segments */
+    newN = 1600UL + extra;
+
+    /* bootstrap: 0x144DD is "mov edi, offset t_TrackSegs" (BF + imm32) -> imm at +1 = runtime base */
+    oldBase = *(unsigned long *)(IDAtoFlat(0x144DD) + 1);
+    if (oldBase <= 0x10000UL) {
+      LogLine("- ExtraTrackSegments: bootstrap read failed; DISABLED\n");
+    } else {
+      bytes = (newN + 2) * 0x6CUL;               /* pre-slot + newN slots + end sentinel */
+      bb = (unsigned char *)malloc(bytes);
+      if (!bb) {
+        sprintf(strbuf, "- ExtraTrackSegments: alloc of %lu KB FAILED; stock 1600 segs\n", bytes >> 10);
+        LogLine(strbuf);
+      } else {
+        newBase = (unsigned long)bb + 0x6CUL;
+        /* Static-only DATA base pointer(s) share t_TrackSegs's data delta and must move too.
+           pFirstSegSect1 (IDA 0xF9CE0) is NEVER runtime-written -> it stays = oldBase unless we
+           relocate it (this was the crash: seg-0 base left in the old buffer). pFirstSegPitl
+           (0xF9CDC) is runtime-set, relocated here only for init consistency. */
+        ddelta = oldBase - 0x146D14UL;
+        pfss = (unsigned long *)(ddelta + 0xF9CE0UL);
+        pfsp = (unsigned long *)(ddelta + 0xF9CDCUL);
+        grp[0]=segBase;    cnt[0]=43; ov[0]=oldBase;             nv[0]=newBase;
+        grp[1]=segPre;     cnt[1]=3;  ov[1]=oldBase - 0x6CUL;    nv[1]=newBase - 0x6CUL;
+        grp[2]=segEnd;     cnt[2]=4;  ov[2]=oldBase + 0x2A300UL; nv[2]=newBase + newN * 0x6CUL;
+        grp[3]=segEndPlus; cnt[3]=1;  ov[3]=oldBase + 0x2A36CUL; nv[3]=newBase + (newN + 1) * 0x6CUL;
+
+        ok = 1;                                   /* pass 1: verify every site holds its old value */
+        for (g = 0; g < 4 && ok; g++)
+          for (i = 0; i < cnt[g]; i++)
+            if (SegFindImm(grp[g][i], ov[g]) < 0) {
+              sprintf(strbuf, "- ExtraTrackSegments: site 0x%lX (grp %d) mismatch; DISABLED\n",
+                      grp[g][i], g);
+              LogLine(strbuf); ok = 0; break;
+            }
+        if (ok && (*pfss != oldBase || *pfsp != oldBase)) {   /* static data base pointers */
+          LogLine("- ExtraTrackSegments: static seg-base pointer mismatch; DISABLED\n");
+          ok = 0;
+        }
+
+        if (!ok) {
+          free(bb);
+        } else {                                  /* pass 2: patch */
+          for (g = 0; g < 4; g++)
+            for (i = 0; i < cnt[g]; i++) {
+              off = SegFindImm(grp[g][i], ov[g]);
+              *(unsigned long *)(IDAtoFlat(grp[g][i]) + off) = nv[g];
+            }
+          *pfss = newBase;   /* relocate the static-only seg-0 base pointer (the crash fix) */
+          *pfsp = newBase;
+          sprintf(strbuf, "- ExtraTrackSegments: +%lu -> %lu track+pit segs; buffer %lu KB @ 0x%08lX\n",
+                  extra, newN, bytes >> 10, (unsigned long)bb);
+          LogLine(strbuf);
+        }
+      }
     }
   }
 

@@ -1,0 +1,39 @@
+src/cfgdefin.inc
+  s_740125fb49b74d::t_1f73d3e9f0b1b6 32
+src/timing/convert.inc
+  s_740125fb49b74d::t_40c690d1d19bcf 56
+  s_740125fb49b74d::t_51b7e391683a83 196
+  s_740125fb49b74d::t_4259da0232c797 449-451,464-469,473-475,478-480,483-485,488-490,492-493,497-502,504-510,518,548-550
+  s_740125fb49b74d::t_c92c3e22278c23 452-463
+  s_740125fb49b74d::t_a68a08ce12e247 470,472,476-477,481-482,491,503,511-512,515
+  s_740125fb49b74d::t_401e8387a90a81 471
+  s_740125fb49b74d::t_4a858891bfb025 486-487
+  s_740125fb49b74d::t_3f916a37445c71 494-496
+  s_740125fb49b74d::t_a9e748189986ea 513-514
+  s_740125fb49b74d::t_24f66acb0d172b 516-517
+  s_740125fb49b74d::t_1dfa35373e8304 519-524,530-533,535-537
+  s_740125fb49b74d::t_cbffd9c3e514f6 525-528
+  s_740125fb49b74d::t_8c322417109dcf 529,543
+  s_740125fb49b74d::t_ce0f23c5a85b52 534
+  s_740125fb49b74d::t_d98ff705231eb6 538-542
+  s_740125fb49b74d::t_b3ace0c5c6745d 544-545
+  s_740125fb49b74d::t_5e27cf4335dae1 546-547
+build/gp2lap.cfg
+  s_740125fb49b74d::t_e6b53224659db1 26-28
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "6f0a57d3d2d0b7f6508a9e0cae0123df61ee3677",
+  "prompts": {},
+  "sessions": {
+    "s_740125fb49b74d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "372c5c91-8458-4930-a40c-0c08877321f5",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Roberto Remedio <rremedio@gmail.com>"
+    }
+  }
+}

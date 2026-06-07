@@ -1,0 +1,33 @@
+src/timing/rbehind.c
+  s_740125fb49b74d::t_956e878accff34 80
+src/timing/timinstd.h
+  s_740125fb49b74d::t_08bb5d58f1dace 6
+build/gp2lap.cfg
+  s_740125fb49b74d::t_ef1f17ee0c421b 13
+src/cfgdefin.inc
+  s_740125fb49b74d::t_81a5c38a444501 25
+src/timing/convert.inc
+  s_740125fb49b74d::t_dd112d0178445c 53
+  s_740125fb49b74d::t_0078280f781c44 190
+src/timing/qatl.inc
+  s_740125fb49b74d::t_e351a22b6b34a0 277
+  s_740125fb49b74d::t_2c46cb9269f174 291
+src/timing/rlaptime.c
+  s_740125fb49b74d::t_872d8e850364e3 87
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "89eaa2dd9c668da0b141e9b56e605b259cfa1f06",
+  "prompts": {},
+  "sessions": {
+    "s_740125fb49b74d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "372c5c91-8458-4930-a40c-0c08877321f5",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Roberto Remedio <rremedio@gmail.com>"
+    }
+  }
+}

@@ -29,6 +29,7 @@ itemdef items[] = {         // item names are case insensitive
 
     //[TRACK]
     NULL, ULONGTYPE,  "ExtraTrackSegments",
+    NULL, ULONGTYPE,  "ExtraTrackFileKB",
 
     //[TRACK MAP]
     NULL, ULONGTYPE,  "mapTrackColor",

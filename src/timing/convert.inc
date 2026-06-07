@@ -471,6 +471,7 @@ void __near _cdecl AHFAfterGp2Init(void)
     unsigned long oldInterobjs, newInterobjs;   /* t_interobjs (17 default-obj ptrs) sits 0x44 B before t_LoadedTrkData */
     unsigned char *bL, *bR, *c1, *c2;
     int i, off, ok;
+    extern unsigned char *pTrackBuf;   /* GP2Lap's track-file pointer (set once at attach from the stock read base) */
 
     extra = ExtraTrackFileKB;
     if (extra > 256) extra = 256;                 /* clamp: <= ~320 KB total */
@@ -545,6 +546,11 @@ void __near _cdecl AHFAfterGp2Init(void)
                     hL, hI, hR, flatLo, flatHi);
             LogLine(strbuf);
           }
+          /* GP2Lap captured pTrackBuf from the STOCK read base via a data hook at attach
+             (lammcall.asm, 0x7AE04 -> 0x3B9AD0 = t_TrkReadbuffer). It is never refreshed, so
+             TFLHook's GP2INFO/editor-track detection + custom names + split segs would read the
+             old, now-unused read buffer. Repoint it to the relocated read buffer. */
+          if (pTrackBuf) pTrackBuf = (unsigned char *)newRead;
         }
       }
     }

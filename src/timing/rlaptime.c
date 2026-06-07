@@ -84,7 +84,10 @@ void __near MakeLaptimeBoard(unsigned char caropos /*kann eigentl. weg*/)
     _bprintf(atmp, sizeof(atmp), "%02d.", i+1);
     WRITEARRN6(&atmp, &picbuf, tab_yofs + (i%5)*(fntarrn6.ydim-1), tab_xofs+TABCOL1POSX, GP2WHITE);
 
-    _bprintf(atmp, sizeof(atmp), "%-15.15s", GetMyDriverName(tmpcar->car_id) );
+    if (PerCarTyreCompounds && ShowTyreCompoundBadge)
+      _bprintf(atmp, sizeof(atmp), "(%c)%-12.12s", CompoundLetter(tmpcar->car_id), GetMyDriverName(tmpcar->car_id) );
+    else
+      _bprintf(atmp, sizeof(atmp), "%-15.15s", GetMyDriverName(tmpcar->car_id) );
     WRITEARRN6(&atmp, &picbuf, tab_yofs + (i%5)*(fntarrn6.ydim-1), tab_xofs+TABCOL2POSX, HUMANCARID(tmpcar->car_id) ? GP2RED : GP2BLACK);
 
     _bprintf(atmp, sizeof(atmp), "%.10s", myGetTimeString(&tmpcar->lastlap_time) );

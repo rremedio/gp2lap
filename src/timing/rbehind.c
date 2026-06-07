@@ -77,7 +77,10 @@ void __near MakeBehindBoard(unsigned char carpos)
 
     _bprintf(atmp, sizeof(atmp), "%02d.", i+1);
     WRITEARRN6(&atmp, &picbuf, tab_yofs + (i%5)*(fntarrn6.ydim-1), tab_xofs+TABCOL1POSX, GP2WHITE);
-    _bprintf(atmp, sizeof(atmp), "%-15.15s", GetMyDriverName(POS2CARID(i)) );
+    if (PerCarTyreCompounds && ShowTyreCompoundBadge)
+      _bprintf(atmp, sizeof(atmp), "(%c)%-12.12s", CompoundLetter(POS2CARID(i)), GetMyDriverName(POS2CARID(i)) );
+    else
+      _bprintf(atmp, sizeof(atmp), "%-15.15s", GetMyDriverName(POS2CARID(i)) );
     WRITEARRN6(&atmp, &picbuf, tab_yofs + (i%5)*(fntarrn6.ydim-1), tab_xofs+TABCOL2POSX, HUMANCARID(POS2CARIDFULL(i)) ? GP2RED : GP2BLACK);
     // mit anderem Font
     //WRITEVERD7K(&atmp, &picbuf, tab_yofs + (i%5)*(fntverd7k.ydim-1), tab_xofs+TABCOL2POSX, HUMANCARID(POS2CARIDFULL(i)) ? GP2RED : GP2BLACK);

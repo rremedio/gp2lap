@@ -13,7 +13,7 @@ void OnATLReDraw(void);
 
 
 //---- Zusatzinfos fuer ATL pages Verwaltung ----
-unsigned long FIRSTPOS = 0;  // fÅr Anzeige in der Tabelle
+unsigned long FIRSTPOS = 0;  // for display in the table
 unsigned long LASTPOS = 4;
 
 //---- always order-indexed!!! ----
@@ -233,7 +233,7 @@ void InitMyTiming(void)
 #pragma aux AHFCrossingSplit parm [EAX] [ESI] caller;
 void __near _cdecl AHFCrossingSplit( unsigned long section,
                                       struct singlecarstruct *actcar )
-// öbergabe: section: (0 == line, 1 == split1, 2 == split2)
+// Input: section: (0 == line, 1 == split1, 2 == split2)
 {
   static unsigned long ii, p;
   static unsigned char carpos;
@@ -325,6 +325,7 @@ void __near _cdecl AHFCrossingSplit( unsigned long section,
 //----- Start of Session --------
 void __near _cdecl AHFSOSHook(void)
 {
+  AHFFillCompounds();   /* per-car tyre compounds: bSessionMode is current at SOS */
   InitMyTiming();
 }
 

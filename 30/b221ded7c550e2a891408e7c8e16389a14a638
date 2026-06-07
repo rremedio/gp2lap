@@ -1,0 +1,29 @@
+src/timing/codehook.inc
+  s_740125fb49b74d::t_e83b6563235ce9 328
+src/timing/convert.inc
+  s_740125fb49b74d::t_f696b791264c8b 143-149,156-157,164-165
+  s_740125fb49b74d::t_68eaed306d27b3 85-89,92,96,110-142,150-153,159-163
+  s_740125fb49b74d::t_a0374c37827673 100-109
+  s_740125fb49b74d::t_f70c6228103389 53-54
+src/lammcall.asm
+  s_740125fb49b74d::t_c94f1318d41121 601-602
+src/timing/qatl.inc
+  s_740125fb49b74d::t_1d491a075d494b 291-294
+  s_740125fb49b74d::t_6ba8df26871a1f 277-280
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "30b221ded7c550e2a891408e7c8e16389a14a638",
+  "prompts": {},
+  "sessions": {
+    "s_740125fb49b74d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "372c5c91-8458-4930-a40c-0c08877321f5",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Roberto Remedio <rremedio@gmail.com>"
+    }
+  }
+}

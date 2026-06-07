@@ -379,6 +379,7 @@ void __near _cdecl AHFAfterGp2Init(void)
     unsigned long ddelta;
     unsigned long *pfss, *pfsp;
     int g, i, off, ok;
+    extern GP2Seg *pTrackSegs;   /* GP2Lap's own seg-buffer pointer (set once at attach from the stock base) */
 
     extra = ExtraTrackSegments;
     if (extra > 6400) extra = 6400;                /* clamp: newN <= 8000 segments */
@@ -431,6 +432,10 @@ void __near _cdecl AHFAfterGp2Init(void)
             }
           *pfss = newBase;   /* relocate the static-only seg-0 base pointer (the crash fix) */
           *pfsp = newBase;
+          /* GP2Lap captured pTrackSegs from the STOCK base via a data hook at attach (lammcall.asm,
+             0x14178 -> 0x146D14). It is never refreshed, so the live track map (trackmap.c) + track.c
+             would read the old, now-unused buffer -> empty map. Repoint it to the new base. */
+          if (pTrackSegs) pTrackSegs = (GP2Seg *)newBase;
           sprintf(strbuf, "- ExtraTrackSegments: +%lu -> %lu track+pit segs; buffer %lu KB @ 0x%08lX\n",
                   extra, newN, bytes >> 10, (unsigned long)bb);
           LogLine(strbuf);

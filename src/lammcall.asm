@@ -38,8 +38,6 @@ _TEXT   SEGMENT BYTE PUBLIC USE32 'CODE'
         EXTRN   _pIsHumanFlag           :dword  ; nur keurzzeitig fur CalcSetup gebracuht
         EXTRN   _pUseAdvSetup           :dword
         EXTRN   _pPlayerSetup           :dword
-        EXTRN   _fpAHFFillCompounds     :dword
-        EXTRN   _PerCarTyreCompounds    :dword
 
         EXTRN   _picbufptr              :dword
         EXTRN   _flagfield              :dword
@@ -600,19 +598,9 @@ hprf_end:
 ;-----------------------------------------------------------------------------------
 ; Format: [IDA-code-address], [hookcond ptr], [gp2lap hook function], [gp2lap org hook jump address]
 ;-----------------------------------------------------------------------------------
-;----- 2026 --- per-car compound fill: wrap "call SetSetups??" (re-exec it, then fill) -----
-Hook_FillCompounds proc near
-MyOrgFill:      db      0E8h            ; call SetSetups?? (re-executed; rel32 patched by CondPatchCodeHooks)
-                dd      00000000h
-                pushad
-                call    dword ptr ds:_fpAHFFillCompounds
-                popad
-                retn
-Hook_FillCompounds endp
-
+; (2026) per-car compound fill now runs from AHFSOSHook at start-of-session,
+; where bSessionMode is current; no SetSetups?? hook needed any more.
 code_hooks:
-                dd      2d3ddh, _PerCarTyreCompounds, Hook_FillCompounds, MyOrgFill ; per-car compounds (1/2)
-                dd      2d3eah, _PerCarTyreCompounds, Hook_FillCompounds, MyOrgFill ; per-car compounds (2/2)
                 dd      32c5ch, swAlwaysTrue, Hook_EOF,         Hook_EOF        ; end of frame
                 dd      35e26h, swAlwaysTrue, Hook_SOS,         Hook_SOS        ; start of session
                 dd      6b6d6h, swAlwaysTrue, Hook_LOS,         Hook_LOS        ; load of session

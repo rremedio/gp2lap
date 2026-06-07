@@ -50,6 +50,8 @@ unsigned long SupressFastestLap = 0;    // by default: no
 unsigned long atlAcrossTop = 0;    // by default: no
 unsigned long PerCarTyreCompounds = 0;  // 2026: per-car tyre compounds by pit strategy (0=off)
 unsigned long SoftTyresInQuali = 1;     // 2026: in qualifying, everyone runs D (softest). 0 = stock
+static unsigned long s_baseCsum  = 0;   // 2026: track checksum the base below was captured for
+static int           s_trackBase = -1;  // 2026: genuine track base compound (0..3), -1 = not yet
 
 extern void MyCompoundToBL(void);       // asm grip helper in lammcall.asm (patched into CalcESIsGrip?)
 extern GP2CSx *pCarSetups;              // GP2's per-car setup array (osCarSetups), already resolved
@@ -80,55 +82,89 @@ char CompoundLetter(unsigned int carId)
 //--- is positioned so the MOST-POPULATED bucket lands on the track base compound, then clamped to A..D.
 //--- (Reproduces the design examples; the player follows their own chosen strategy. See
 //--- docs/gp2lap/per-car-tyre-compounds.md.)
+//--- Runs once per session from AHFSOSHook (start-of-session), the first point where
+//--- bSessionMode (==*GP2_RaceMode) reflects the SESSION WE ARE ENTERING. (At GP2's
+//--- car-setup time it still holds the PREVIOUS session's mode, which made qualifying's
+//--- all-D leak into the race.) Modes: 0x80 = race, 0x40 = qualifying, else practice/
+//--- warm-up/etc. We always (re)write every car's setup[+8] so no stale value survives.
 void __near _cdecl AHFFillCompounds(void)
 {
-  int i, s, k, nb, mp, base, ncars, isRace, q, sh, c;
+  int i, s, k, nb, mp, base, ncars, mode, q, sh, c;
   int present[4], bstop[4], bcount[4], comp[4], stop2comp[4];
   GP2CSx *psetup;
 
+  if (!PerCarTyreCompounds) return;            /* feature off -> stock untouched */
   if (!pCarSetups) return;
   psetup = (GP2CSx *)pPlayerSetup;
-  isRace = (GP2_RaceMode && (*GP2_RaceMode & 0x80)) ? 1 : 0;
-  base   = pCarSetups[0].compound & 3;        /* track's compound (uniform before we overwrite it) */
 
-  if (!isRace) {                              /* qualifying / practice */
-    q = SoftTyresInQuali ? 3 : base;          /* soft = D, else stock single compound */
+  /* True track base compound. b_TireType (0x1771C0) is the SAME byte as the player's  */
+  /* setup[+8] (pPlayerSetup 0x1771B8 + 8), so our own fills overwrite it: it equals    */
+  /* the genuine track base only on the FIRST session of a weekend, before any fill.    */
+  /* DoTrackSetup writes it at track load; snapshot it once per track (dwTrackChecksum   */
+  /* change) and reuse it for every session that weekend, surviving quali->race.        */
+  if (dwTrackChecksum != s_baseCsum || s_trackBase < 0) {
+    s_trackBase = (*((BYTE *)pCarSetups - 0x58)) & 3;
+    s_baseCsum  = dwTrackChecksum;
+  }
+  base = s_trackBase;
+
+  mode = GP2_RaceMode ? (int)(*GP2_RaceMode) : 0;
+
+  if (mode == 0x80) {
+    /* --- RACE: pit-strategy -> per-car compound --- */
+    ncars = GP2_NumStarters ? (int)*GP2_NumStarters : 26;
+    if (ncars < 1) ncars = 1;
+    if (ncars > GP2_MAX_NUMCARS) ncars = GP2_MAX_NUMCARS;
+
+    for (s = 0; s < 4; s++) present[s] = 0;
+    for (i = 0; i < ncars; i++) present[pCarSetups[i].num_pitstops & 3]++;
+
+    nb = 0;                                    /* distinct stop-counts present, ascending */
+    for (s = 0; s < 4; s++) if (present[s]) { bstop[nb] = s; bcount[nb] = present[s]; nb++; }
+    if (nb == 0) return;
+
+    mp = 0;                                    /* most-populated bucket (ties -> fewest stops) */
+    for (k = 1; k < nb; k++) if (bcount[k] > bcount[mp]) mp = k;
+
+    for (k = 0; k < nb; k++) comp[k] = base + (k - mp);   /* fewer stops harder, anchored at base */
+    if (comp[0] < 0)    { sh = -comp[0];       for (k = 0; k < nb; k++) comp[k] += sh; }  /* clamp run */
+    if (comp[nb-1] > 3) { sh = comp[nb-1] - 3; for (k = 0; k < nb; k++) comp[k] -= sh; } /* into A..D */
+
+    for (s = 0; s < 4; s++) stop2comp[s] = base;
+    for (k = 0; k < nb; k++) {
+      c = comp[k]; if (c < 0) c = 0; if (c > 3) c = 3;
+      stop2comp[bstop[k]] = c;
+    }
+
+    for (i = 0; i < GP2_MAX_NUMCARS; i++)
+      pCarSetups[i].compound = (BYTE)stop2comp[pCarSetups[i].num_pitstops & 3];
+    if (psetup)
+      psetup->compound = (BYTE)stop2comp[psetup->num_pitstops & 3];
+
+    sprintf(strbuf, "- PerCarTyre RACE: base=%c", (char)('A' + base));
+    for (s = 0; s < 4; s++) if (present[s]) {
+      char tmp[24]; sprintf(tmp, "  %dstop=%c(x%d)", s, (char)('A' + stop2comp[s]), present[s]);
+      strcat(strbuf, tmp);
+    }
+    strcat(strbuf, "\n"); LogLine(strbuf);
+  }
+  else if (mode & 0x40) {
+    /* --- QUALIFYING: everyone on D (softest) when enabled, else the stock base. --- */
+    q = SoftTyresInQuali ? 3 : base;
     for (i = 0; i < GP2_MAX_NUMCARS; i++) pCarSetups[i].compound = (BYTE)q;
     if (psetup) psetup->compound = (BYTE)q;
-    return;
+    sprintf(strbuf, "- PerCarTyre QUALI: all=%c (base=%c)\n", (char)('A' + q), (char)('A' + base));
+    LogLine(strbuf);
   }
-
-  /* --- race: pit-strategy -> compound --- */
-  ncars = GP2_NumStarters ? (int)*GP2_NumStarters : 26;
-  if (ncars < 1) ncars = 1;
-  if (ncars > GP2_MAX_NUMCARS) ncars = GP2_MAX_NUMCARS;
-
-  for (s = 0; s < 4; s++) present[s] = 0;
-  for (i = 0; i < ncars; i++) present[pCarSetups[i].num_pitstops & 3]++;
-
-  nb = 0;                                      /* distinct stop-counts present, ascending */
-  for (s = 0; s < 4; s++) if (present[s]) { bstop[nb] = s; bcount[nb] = present[s]; nb++; }
-  if (nb == 0) return;
-
-  mp = 0;                                      /* most-populated bucket (ties -> fewest stops) */
-  for (k = 1; k < nb; k++) if (bcount[k] > bcount[mp]) mp = k;
-
-  for (k = 0; k < nb; k++) comp[k] = base + (k - mp);   /* fewer stops harder, anchored at base */
-  if (comp[0] < 0)      { sh = -comp[0];      for (k = 0; k < nb; k++) comp[k] += sh; }  /* clamp run */
-  if (comp[nb-1] > 3)   { sh = comp[nb-1] - 3; for (k = 0; k < nb; k++) comp[k] -= sh; } /* into A..D */
-
-  for (s = 0; s < 4; s++) stop2comp[s] = base;
-  for (k = 0; k < nb; k++) {
-    c = comp[k]; if (c < 0) c = 0; if (c > 3) c = 3;
-    stop2comp[bstop[k]] = c;
+  else {
+    /* --- Standalone practice (0x00), warm-up, free practice, anything else: leave --- */
+    /* --- every car on the stock single compound (track base) -> behaves like stock. -- */
+    for (i = 0; i < GP2_MAX_NUMCARS; i++) pCarSetups[i].compound = (BYTE)base;
+    if (psetup) psetup->compound = (BYTE)base;
+    sprintf(strbuf, "- PerCarTyre PRACTICE(mode=0x%02X): all=%c\n", (unsigned)mode, (char)('A' + base));
+    LogLine(strbuf);
   }
-
-  for (i = 0; i < GP2_MAX_NUMCARS; i++)
-    pCarSetups[i].compound = (BYTE)stop2comp[pCarSetups[i].num_pitstops & 3];
-  if (psetup)
-    psetup->compound = (BYTE)stop2comp[psetup->num_pitstops & 3];
 }
-void (__near _cdecl *fpAHFFillCompounds)(void) = AHFFillCompounds;
 
 #include "timing/gp2struc.h"
 #include "timing/timinpic.h"

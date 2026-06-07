@@ -130,9 +130,9 @@ char *Pos2String(unsigned char carpos)
 // 2 sofort raus & auf besttime kurs: section werden nicht rot gekennz.
 // 3 rote zeiten, werden gegen oppcar die -:--.--- haben nur schwarz angezeigt (aehnlich prob 2)
 void UpdateLapStat(struct singlecarstruct *cariv, unsigned long boardmode)
-/* šbergabe: cariv = das CarInView (auf das sich alles bezieht)
+/* ï¿½bergabe: cariv = das CarInView (auf das sich alles bezieht)
              boardmode == [QATL_SECTORS, QATL_SECDIFF]
-   Rckgabe: nix
+   Rï¿½ckgabe: nix
 */
 {
   static struct singlecarstruct *leader, *oppcar;
@@ -274,7 +274,10 @@ void UpdateLapStat(struct singlecarstruct *cariv, unsigned long boardmode)
   WRITEARRN6R(&atmp, &picbuf, tabletofs + (row++)*(fntarrn6.ydim+1), SECTORPICX+SECCOL2POSX, GP2BLACK);
   // nicht anzeigen, wenn noch kein polesitter
   if ((qwhatopp[0] != AGAINSTLDR) || myGP2_TIME_ISVALID(oppsplits[2])) {
-    _bprintf(atmp, sizeof(atmp), "%.6s", GetMyDriverName(oppcarid));
+    if (PerCarTyreCompounds)
+      _bprintf(atmp, sizeof(atmp), "(%c)%.6s", CompoundLetter(oppcarid), GetMyDriverName(oppcarid));
+    else
+      _bprintf(atmp, sizeof(atmp), "%.6s", GetMyDriverName(oppcarid));
     WRITEVERD7KR(&atmp, &picbuf, tabletofs + ( 0 )*(fntverd7k.ydim), SECTORPICX+SECCOL2POSX, GP2WHITE);
     _bprintf(atmp, sizeof(atmp), "%s  ", Pos2String(Carid2Qualpos(oppcarid)+1));
     WRITEVERD7FKR(&atmp, &picbuf, tabletofs + (row)*(fntverd7fk.ydim+1), SECTORPICX+SECCOL2POSX, GP2BLACK);
@@ -285,7 +288,10 @@ void UpdateLapStat(struct singlecarstruct *cariv, unsigned long boardmode)
   //------------------------------------
 
   row = 0;
-  _bprintf(atmp, sizeof(atmp), "%.6s", GetMyDriverName(cariv->car_id));
+  if (PerCarTyreCompounds)
+    _bprintf(atmp, sizeof(atmp), "(%c)%.6s", CompoundLetter(cariv->car_id), GetMyDriverName(cariv->car_id));
+  else
+    _bprintf(atmp, sizeof(atmp), "%.6s", GetMyDriverName(cariv->car_id));
   WRITEVERD7KR(&atmp, &picbuf, tabletofs + (row)*(fntverd7k.ydim), SECTORPICX+SECCOL3POSX, GP2WHITE);
   for (i = 0; i <= cariv->splitNr; i++) {
     row++;

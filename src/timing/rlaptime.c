@@ -84,7 +84,7 @@ void __near MakeLaptimeBoard(unsigned char caropos /*kann eigentl. weg*/)
     _bprintf(atmp, sizeof(atmp), "%02d.", i+1);
     WRITEARRN6(&atmp, &picbuf, tab_yofs + (i%5)*(fntarrn6.ydim-1), tab_xofs+TABCOL1POSX, GP2WHITE);
 
-    if (PerCarTyreCompounds)
+    if (PerCarTyreCompounds && ShowTyreCompoundBadge)
       _bprintf(atmp, sizeof(atmp), "(%c)%-12.12s", CompoundLetter(tmpcar->car_id), GetMyDriverName(tmpcar->car_id) );
     else
       _bprintf(atmp, sizeof(atmp), "%-15.15s", GetMyDriverName(tmpcar->car_id) );

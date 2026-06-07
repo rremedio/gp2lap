@@ -274,7 +274,7 @@ void UpdateLapStat(struct singlecarstruct *cariv, unsigned long boardmode)
   WRITEARRN6R(&atmp, &picbuf, tabletofs + (row++)*(fntarrn6.ydim+1), SECTORPICX+SECCOL2POSX, GP2BLACK);
   // nicht anzeigen, wenn noch kein polesitter
   if ((qwhatopp[0] != AGAINSTLDR) || myGP2_TIME_ISVALID(oppsplits[2])) {
-    if (PerCarTyreCompounds)
+    if (PerCarTyreCompounds && ShowTyreCompoundBadge)
       _bprintf(atmp, sizeof(atmp), "(%c)%.6s", CompoundLetter(oppcarid), GetMyDriverName(oppcarid));
     else
       _bprintf(atmp, sizeof(atmp), "%.6s", GetMyDriverName(oppcarid));
@@ -288,7 +288,7 @@ void UpdateLapStat(struct singlecarstruct *cariv, unsigned long boardmode)
   //------------------------------------
 
   row = 0;
-  if (PerCarTyreCompounds)
+  if (PerCarTyreCompounds && ShowTyreCompoundBadge)
     _bprintf(atmp, sizeof(atmp), "(%c)%.6s", CompoundLetter(cariv->car_id), GetMyDriverName(cariv->car_id));
   else
     _bprintf(atmp, sizeof(atmp), "%.6s", GetMyDriverName(cariv->car_id));

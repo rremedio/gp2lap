@@ -3,6 +3,7 @@
 
 //--- 2026: per-car tyre compounds (defined in timing/convert.inc) ---
 extern unsigned long PerCarTyreCompounds;   // cfg switch: 0=off, 1=per-car compounds
+extern unsigned long ShowTyreCompoundBadge; // cfg switch: show (X) badge (only if PerCarTyreCompounds=1)
 char CompoundLetter(unsigned int carId);    // compound 0..3 -> 'A'..'D' for the ATL badge
 
 

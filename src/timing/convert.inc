@@ -50,6 +50,7 @@ unsigned long SupressFastestLap = 0;    // by default: no
 unsigned long atlAcrossTop = 0;    // by default: no
 unsigned long PerCarTyreCompounds = 0;  // 2026: per-car tyre compounds by pit strategy (0=off)
 unsigned long SoftTyresInQuali = 1;     // 2026: in qualifying, everyone runs D (softest). 0 = stock
+unsigned long ShowTyreCompoundBadge = 1;// 2026: show the (X) compound badge; only if PerCarTyreCompounds=1 (0=blind)
 static unsigned long s_baseCsum  = 0;   // 2026: track checksum the base below was captured for
 static int           s_trackBase = -1;  // 2026: genuine track base compound (0..3), -1 = not yet
 
@@ -140,13 +141,6 @@ void __near _cdecl AHFFillCompounds(void)
       pCarSetups[i].compound = (BYTE)stop2comp[pCarSetups[i].num_pitstops & 3];
     if (psetup)
       psetup->compound = (BYTE)stop2comp[psetup->num_pitstops & 3];
-
-    sprintf(strbuf, "- PerCarTyre RACE: base=%c", (char)('A' + base));
-    for (s = 0; s < 4; s++) if (present[s]) {
-      char tmp[24]; sprintf(tmp, "  %dstop=%c(x%d)", s, (char)('A' + stop2comp[s]), present[s]);
-      strcat(strbuf, tmp);
-    }
-    strcat(strbuf, "\n"); LogLine(strbuf);
   }
   else if ((mode & 0x40) || mode == 0x01 || mode == 0x03) {
     /* --- QUALIFYING (0x40), or Friday(0x01)/Saturday(0x03) free practice: follow   --- */
@@ -155,16 +149,12 @@ void __near _cdecl AHFFillCompounds(void)
     q = SoftTyresInQuali ? 3 : base;
     for (i = 0; i < GP2_MAX_NUMCARS; i++) pCarSetups[i].compound = (BYTE)q;
     if (psetup) psetup->compound = (BYTE)q;
-    sprintf(strbuf, "- PerCarTyre QUALI/FP(mode=0x%02X): all=%c (base=%c)\n", (unsigned)mode, (char)('A' + q), (char)('A' + base));
-    LogLine(strbuf);
   }
   else {
     /* --- Unlimited practice (0x00), pre-race warm-up (0x02), anything else: leave --- */
     /* --- every car on the stock single compound (track base) -> behaves like stock. -- */
     for (i = 0; i < GP2_MAX_NUMCARS; i++) pCarSetups[i].compound = (BYTE)base;
     if (psetup) psetup->compound = (BYTE)base;
-    sprintf(strbuf, "- PerCarTyre PRACTICE(mode=0x%02X): all=%c\n", (unsigned)mode, (char)('A' + base));
-    LogLine(strbuf);
   }
 }
 
@@ -197,6 +187,7 @@ void FrankSoftInit(void)
   if (GetCfgULong("atlMarkTopX"))         SetLaptimeTopCount(*GetCfgULong("atlMarkTopX"));
   if (GetCfgULong("PerCarTyreCompounds")) PerCarTyreCompounds = *GetCfgULong("PerCarTyreCompounds");
   if (GetCfgULong("SoftTyresInQuali"))    SoftTyresInQuali = *GetCfgULong("SoftTyresInQuali");
+  if (GetCfgULong("ShowTyreCompoundBadge")) ShowTyreCompoundBadge = *GetCfgULong("ShowTyreCompoundBadge");
   if (GetCfgULong("logDebugScreenLines")) VisLogSetStrCount(*GetCfgULong("logDebugScreenLines"));
   if (GetCfgULong("DrawLines"))           SetCopySvgaLinesNum(*GetCfgULong("DrawLines"));
 

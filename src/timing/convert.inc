@@ -54,6 +54,7 @@ unsigned long ShowTyreCompoundBadge = 1;// 2026: show the (X) compound badge; on
 unsigned long JamTextureExtraMB = 0;    // 2026: ADD N MB to the JAM texture buffer over stock ~2.84MB (0 = stock)
 unsigned long ExtraTrackSegments = 0;   // 2026: ADD N track+pit segments over stock 1600 (0 = stock ~7km limit)
 unsigned long ExtraTrackFileKB = 0;     // 2026: ADD N KB to the track file/data buffers over stock ~62KB (0 = stock)
+unsigned long PitSpeedKmh = 80;         // 2026: pit-lane speed limit (km/h) for BOTH AI + player (0 = stock/untouched)
 static unsigned long s_baseCsum  = 0;   // 2026: track checksum the base below was captured for
 static int           s_trackBase = -1;  // 2026: genuine track base compound (0..3), -1 = not yet
 
@@ -194,6 +195,7 @@ void FrankSoftInit(void)
   if (GetCfgULong("JamTextureExtraMB"))     JamTextureExtraMB = *GetCfgULong("JamTextureExtraMB");
   if (GetCfgULong("ExtraTrackSegments"))    ExtraTrackSegments = *GetCfgULong("ExtraTrackSegments");
   if (GetCfgULong("ExtraTrackFileKB"))      ExtraTrackFileKB = *GetCfgULong("ExtraTrackFileKB");
+  if (GetCfgULong("PitSpeedKmh"))           PitSpeedKmh = *GetCfgULong("PitSpeedKmh");
   if (GetCfgULong("logDebugScreenLines")) VisLogSetStrCount(*GetCfgULong("logDebugScreenLines"));
   if (GetCfgULong("DrawLines"))           SetCopySvgaLinesNum(*GetCfgULong("DrawLines"));
 
@@ -553,6 +555,31 @@ void __near _cdecl AHFAfterGp2Init(void)
           if (pTrackBuf) pTrackBuf = (unsigned char *)newRead;
         }
       }
+    }
+  }
+
+  //--- 2026 --- pit-lane speed limit, matched for AI + player. The limit is the clamp value
+  //--- dword_CBA78 (IDA 0xCBA78): the AI clamps its advised speed to it, and the human limiter uses
+  //--- CBA78 x d_SpeedFactor1 (IDA 0xD55F0). Derive both from PitSpeedKmh so both hit the same speed:
+  //---   CBA78          = T * 0x10000 / 0x464   (AI law verified in-game: km/h = CBA78 * 0x464 >> 16)
+  //---   d_SpeedFactor1 = 0x4300                (cancels the player's ~5% under-read -> matches the AI)
+  //--- Each data address is bootstrapped from the code operand that references it (the LE loader has
+  //--- fixed the absolute operand to its runtime address). 0 = leave stock. See docs/pit-speed-limit.md.
+  if (PitSpeedKmh) {
+    unsigned char *r1 = (unsigned char *)IDAtoFlat(0x22CDA);  /* cmp ecx, dword_CBA78  (3B 0D <a32>) */
+    unsigned char *r2 = (unsigned char *)IDAtoFlat(0x1997D);  /* imul d_SpeedFactor1   (F7 2D <a32>) */
+    unsigned long t = PitSpeedKmh;
+    if (t < 5UL) t = 5UL; else if (t > 1000UL) t = 1000UL;    /* sanity clamp */
+    if (r1[0] == 0x3B && r1[1] == 0x0D && r2[0] == 0xF7 && r2[1] == 0x2D) {
+      unsigned long *pCba = *(unsigned long **)(r1 + 2);       /* runtime &dword_CBA78    */
+      unsigned long *pFac = *(unsigned long **)(r2 + 2);       /* runtime &d_SpeedFactor1 */
+      unsigned long cba = (t * 0x10000UL) / 0x464UL;
+      *pCba = cba;
+      *pFac = 0x4300UL;
+      sprintf(strbuf, "- PitSpeedKmh: %lu km/h -> CBA78=0x%lX, d_SpeedFactor1=0x4300\n", t, cba);
+      LogLine(strbuf);
+    } else {
+      LogLine("- PitSpeedKmh: opcode mismatch; DISABLED (stock pit speed)\n");
     }
   }
 

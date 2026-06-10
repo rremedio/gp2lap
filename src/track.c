@@ -5,6 +5,7 @@
 #include "basiclog.h"
 #include "misc.h"
 #include "track.h"
+#include "cclinedump.h"
 
 /*
 **	Segment range notes:
@@ -272,7 +273,7 @@ static void FillSegInfo(const GP2Seg *pSeg, GP2SegInfo *pSI)
 }
 
 
-void DumpTrackSegData(int t, DWORD csum, char *name)
+void DumpTrackSegData(int slot, DWORD csum, char *name)
 {
 	char tpath[_MAX_PATH];
 	FILE *tfh = NULL;
@@ -281,15 +282,47 @@ void DumpTrackSegData(int t, DWORD csum, char *name)
 	DWORD sig = 0;
 	char *base = GetGP2Dir();
 	char *datadir = GP2LAP_DATADIR;
+	char slotsuf[4];
 
 	if (!base)
 		return;
+
+	/* 2-digit track slot (01-16) for the dump filenames, so each track load
+	** writes its own bestlNN.txt / ccrepNN.txt without manual renaming. slot is
+	** 0-based (*pTrackIndex); slot+1 is the F1CT## number. 8.3-safe names. */
+	sprintf(slotsuf, "%02d", (slot + 1) & 0xff);
 
 //	if (!_access(datadir, F_OK))
 //		rmdir(datadir); // bug in v1.04: was incorrectly created in current directory.
 	sprintf(tpath, "%s\\%s", base, datadir);
 	if (_access(tpath, F_OK))
 		mkdir(tpath);	// put all files in here
+	// --- DEBUG: dump every track segment (geometry + compiled cc-line) ---
+	{
+		char bpath[_MAX_PATH];
+		FILE *bfh;
+		sprintf(bpath, "%s\\%s\\bestl%s.txt", base, datadir, slotsuf);
+		bfh = fopen(bpath, "w");
+		if (bfh) {
+			int c;
+			fprintf(bfh, "idx\tnr\tangle\txPos\tyPos\txSide\tySide\tsegPosX_0A\tbestLine\tangle_18\twidthL\twidthR\tsub21\n");
+			for (c = 0; c < num_segs; c++) {
+				GP2Seg *pSeg = &pTrackSegs[c];
+				short a18 = *(short*)((char*)pSeg + 0x18);
+				/* tseg+0x21: position sub-bits. low nibble = xPos&7, high nibble
+				** = yPos&7 (sub_73102). The cc-line build/reproject read these, so
+				** the exact 1/8-unit position = (xPos<<3)|(sub21&7), (yPos<<3)|(sub21>>4). */
+				unsigned char sub21 = *(unsigned char*)((char*)pSeg + 0x21);
+				fprintf(bfh, "%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\n",
+					c, pSeg->nr & 0x7ff, pSeg->angle, pSeg->xPos, pSeg->yPos,
+					pSeg->xSide, pSeg->ySide, pSeg->angle_0a, pSeg->bestLine, a18,
+					pSeg->width_60, pSeg->width, sub21);
+			}
+			fclose(bfh);
+		}
+	}
+	// --- DEBUG: dump UACalcBestLine per-segment repro (cc-line compiler) ---
+	DumpCCLineRepro(base, datadir, slotsuf);
 	sprintf(tpath, "%s\\%s\\%08x.seg", base, datadir, csum);
 
 	if (!_access(tpath, F_OK)) {

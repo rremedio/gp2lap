@@ -18,6 +18,7 @@
 #include "miscahf.h"
 #include "vislog.h"
 #include "pages.h"
+#include "cclinedump.h"
 
 #ifdef SOCKCLNT
 #include "sockclnt.h"
@@ -344,6 +345,10 @@ void __near InitGP2Hook(void)
 	// F8 = freeze (instead of F8 + NUM5 + S)
 	*(WORD*)(IDAtoFlat(0x3482e)) = 0x6074;
 	*(WORD*)(IDAtoFlat(0x34a60)) = 0x6074;
+
+	// Arm the cc-line (racing-line) compiler repro capture before any track
+	// load runs UACalcBestLine. Writes <gp2dir>\gp2lpdat\ccrepro.txt per load.
+	InstallCCLineHook();
 
 	InitTrackMap();
 
@@ -852,7 +857,7 @@ void __near SPDFHook(void)
 		// First dump track segments to file
 		GP2LapRecTrack *trackrec = (GP2LapRecTrack*) Log_GetRecBuf(GP2LRTYPE_TRACK);
 		if (trackrec)
-			DumpTrackSegData(trackrec->nr, trackrec->csum, trackrec->name);
+			DumpTrackSegData(trackrec->slot, trackrec->csum, trackrec->name);
 
 		if (info && GP2_FILE_TYPE(info->type) == GP2_FILETYPE_PERF) {
 			GP2PAxInfo *prf_info = (GP2PAxInfo*) info->buf_ptr;
@@ -933,7 +938,7 @@ static void LogSessionData(GP2LapRecSession *rec)
 	pCfgULong = GetCfgULong("MenuTrackMap");
 	if (pCfgULong && *pCfgULong) {
 		GP2LapRecTrack *trackrec = (GP2LapRecTrack*) Log_GetRecBuf(GP2LRTYPE_TRACK);
-		DumpTrackSegData(trackrec->nr, trackrec->csum, trackrec->name);
+		DumpTrackSegData(trackrec->slot, trackrec->csum, trackrec->name);
 	}
 }
 

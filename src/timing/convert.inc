@@ -13,6 +13,7 @@
 
 
 #include "../gp2rmcod.h"
+#include "../cartex.h"   // 2026: per-car car textures
 
 unsigned char *GP2_use_svga = NULL;
 unsigned char *GP2_RaceMode = NULL;
@@ -582,6 +583,11 @@ void __near _cdecl AHFAfterGp2Init(void)
       LogLine("- PitSpeedKmh: opcode mismatch; DISABLED (stock pit speed)\n");
     }
   }
+
+  //--- 2026 --- per-car car textures (SeasonOverrides / override.cfg) ---
+  CarTexInit();
+  //--- 2026 --- per-car cockpit colours ([CockpitColors] in the same file) ---
+  CarCockpitInit();
 
 #ifdef TEST
   //--- 10/98 --- dump the Strings ---------

@@ -31,6 +31,7 @@ itemdef items[] = {         // item names are case insensitive
     NULL, ULONGTYPE,  "ExtraTrackSegments",
     NULL, ULONGTYPE,  "ExtraTrackFileKB",
     NULL, ULONGTYPE,  "PitSpeedKmh",
+    NULL, STRTYPE,    "SeasonOverrides",
 
     //[TRACK MAP]
     NULL, ULONGTYPE,  "mapTrackColor",

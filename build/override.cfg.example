@@ -1,0 +1,27 @@
+;==========================================================================
+; override.cfg  --  per-car overrides for GP2Lap (pointed to by SeasonOverrides)
+;==========================================================================
+; Enable by setting, in gp2lap.cfg:
+;     SeasonOverrides = "override.cfg"
+; If that line is commented out, or this file is missing, the feature is OFF
+; and the game behaves stock.
+;
+; Currently supported override: per-CAR car textures (liveries).
+;   carNN = <path to a BMP>
+;     NN   = the in-game CAR ID (1..40). The game shows the current car's
+;            name (when you switch cars) and number (in the cockpit), so you
+;            can confirm which ID is which driver visually.
+;     BMP  = a 256 x 164, 8-bit (256-colour) Windows BMP, in the same palette
+;            as the car JAM atlases (e.g. exported from GP2Edit). Paths are
+;            relative to the GP2 directory; '\' or '/' both work.
+;
+; A car with NO entry here renders stock (its team livery + its number).
+; A bad/missing/wrong-size BMP is skipped (logged) and that car stays stock.
+; Lines starting with ';' or '#' are comments. [Sections] are ignored for now.
+;==========================================================================
+
+car01 = liv\01a.bmp
+car02 = liv\01b.bmp
+car03 = liv\02a.bmp
+car04 = liv\02b.bmp
+; ... add the rest of your grid the same way (car05 = liv\03a.bmp, etc.)

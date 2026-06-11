@@ -15,6 +15,7 @@
 #define CT_TEAMS  14
 
 unsigned long PerCarTextures = 0;
+unsigned long PerCarCockpit  = 0;
 
 static unsigned char *s_img[CT_MAXCAR];   /* override image per carId (NULL = none) */
 static int            s_remapped[CT_MAXCAR]; /* override image converted global->local indices yet? */
@@ -34,6 +35,15 @@ static unsigned char  *s_pDesc   = 0;  /* &unk_184A8C[0] (descriptors)  */
 static unsigned char  *s_palBase = 0;  /* unk_462D7C: base for descriptor +0x0C palette offset */
 static unsigned char  *s_pCache  = 0;  /* unk_D6CC0[14]: engine's "whose number is in atlas" cache */
 static unsigned char  *s_pTeamTab = 0; /* t_CaridTeamTab: car_id of each team's first driver */
+
+/* Per-car cockpit colours (independent feature, same SeasonOverrides file, [CockpitColors]). */
+extern void MyCockpitColors(void);        /* asm read-site trampoline in lammcall.asm */
+static unsigned char  s_ckpit[CT_MAXCAR][3]; /* per-car cockpit colour bases (the 3 ramp bases) */
+static unsigned char  s_ckpitSet[CT_MAXCAR]; /* 1 if this car has a cockpit colour override */
+static int            s_ckLoaded = 0;        /* number of cockpit overrides parsed */
+static unsigned char **s_pCarView = 0;       /* &p_CarInViewCS (0xD47B4): cockpit car-struct ptr */
+static unsigned char  *s_pCkBase  = 0;       /* &byte_CA0A0: the 3 active cockpit ramp bases */
+static unsigned char  *s_pTeamCk  = 0;       /* &arCockpitColors (0x178FC2): stock per-team, 3 bytes/team */
 
 /* Load one 256x164x8 BMP into a fresh CT_SZ buffer. readstream_svgabmp validates
    dimensions/bit-depth and already flips rows to top-down (atlas order). Returns the
@@ -58,8 +68,9 @@ static unsigned char *CarTexLoadBmp(const char *path)
   return buf;
 }
 
-/* Parse override.cfg: flat "carNN = path" lines. ';' and '#' comments, [sections] ignored.
-   Returns number of car images loaded. */
+/* Parse override.cfg: flat keys, no sections. "carNN = path" is a livery BMP; "cpNN = b0,b1,b2"
+   is a per-car cockpit colour triple (palette indices, hex 0x.. or decimal). ';'/'#'/'[' lines are
+   ignored. Returns number of car images loaded; cockpit count goes to s_ckLoaded. */
 static int CarTexParse(const char *cfgpath)
 {
   FILE *f;
@@ -71,19 +82,44 @@ static int CarTexParse(const char *cfgpath)
             LogLine(strbuf); return 0; }
 
   while (fgets(line, sizeof(line), f)) {
-    char *p = line, *eq, *v, *e;
-    int carId;
+    char *p = line, *eq, *v, *e, *q;
+    int carId, i;
+    long b[3];
     while (*p == ' ' || *p == '\t') p++;
     if (*p == ';' || *p == '#' || *p == '[' || *p == '\r' || *p == '\n' || *p == 0) continue;
-    /* key must be carNN */
-    if ((p[0]|0x20) != 'c' || (p[1]|0x20) != 'a' || (p[2]|0x20) != 'r') continue;
-    carId = atoi(p + 3);
-    if (carId < 1 || carId >= CT_MAXCAR) continue;
     eq = strchr(p, '=');
     if (!eq) continue;
     v = eq + 1;
     while (*v == ' ' || *v == '\t' || *v == '"') v++;
-    /* copy value, trim trailing ws/quote/newline */
+
+    /* cockpit colour: "cpNN = b0,b1,b2" */
+    if ((p[0]|0x20)=='c' && (p[1]|0x20)=='p' && p[2]>='0' && p[2]<='9') {
+      carId = atoi(p + 2);
+      if (carId < 1 || carId >= CT_MAXCAR) continue;
+      q = v;
+      for (i = 0; i < 3; i++) {
+        b[i] = strtol(q, &q, 0);
+        if (b[i] < 0 || b[i] > 255) break;
+        while (*q == ' ' || *q == '\t') q++;
+        if (i < 2) { if (*q != ',') break; q++; while (*q == ' ' || *q == '\t') q++; }
+      }
+      if (i == 3) {
+        s_ckpit[carId][0] = (unsigned char)b[0];
+        s_ckpit[carId][1] = (unsigned char)b[1];
+        s_ckpit[carId][2] = (unsigned char)b[2];
+        s_ckpitSet[carId] = 1; s_ckLoaded++;
+        sprintf(strbuf, "- CarCkpit: cp%02d <- %ld,%ld,%ld\n", carId, b[0], b[1], b[2]);
+        LogLine(strbuf);
+      } else {
+        sprintf(strbuf, "- CarCkpit: cp%02d bad colour triple; skipped\n", carId); LogLine(strbuf);
+      }
+      continue;
+    }
+
+    /* texture livery: "carNN = path" */
+    if ((p[0]|0x20) != 'c' || (p[1]|0x20) != 'a' || (p[2]|0x20) != 'r') continue;
+    carId = atoi(p + 3);
+    if (carId < 1 || carId >= CT_MAXCAR) continue;
     strncpy(path, v, sizeof(path) - 1); path[sizeof(path) - 1] = 0;
     e = path + strlen(path);
     while (e > path && (e[-1]=='\r'||e[-1]=='\n'||e[-1]==' '||e[-1]=='\t'||e[-1]=='"')) *--e = 0;
@@ -260,3 +296,71 @@ void __near _cdecl AHFCarTexSwap(void)
 
 /* asm hook calls this pointer */
 void (__near _cdecl *fpCarTexCode)(void) = AHFCarTexSwap;
+
+/* ------------------------------------------------------------------------- *
+ *  Per-car cockpit colours
+ *
+ *  Stock GP2 colours the cockpit per TEAM: rUpdCarsCockpit (IDA 0x69ED6) reads
+ *  the cockpit car's teamNr and writes three palette-index ramp bases
+ *  (byte_CA0A0/A1/A2) from arCockpitColors[(teamNr-1)*3]; rCkpitColAdjust
+ *  (0x7139D) then shifts the cockpit's 0x2x / 0x3x / 0x9x-0xAx ramps by those
+ *  bases at blit time. We replace the per-team computation in place with a call
+ *  to MyCockpitColors so timing matches stock exactly: for a car with a
+ *  [CockpitColors] override we write its three bases, otherwise we reproduce the
+ *  stock per-team lookup byte-for-byte. See docs/gp2lap/per-car-cockpit-colors.md.
+ * ------------------------------------------------------------------------- */
+void __near _cdecl AHFCockpitColors(void)
+{
+  unsigned char *car;
+  int carId, k;
+  unsigned char team;
+
+  if (!PerCarCockpit) return;
+  car = *s_pCarView;                       /* p_CarInViewCS: the cockpit car */
+  if (!car) return;
+
+  carId = car[0xA6] & 0x3F;                /* strip player bit7 -> car number 1..40 */
+  if (carId >= 1 && carId < CT_MAXCAR && s_ckpitSet[carId]) {
+    for (k = 0; k < 3; k++) s_pCkBase[k] = s_ckpit[carId][k];   /* per-car override */
+    return;
+  }
+  /* fallback: reproduce stock (dec al; and eax,0FFh; eax*3; read arCockpitColors[eax+k]) */
+  team = (unsigned char)(car[0x25] - 1);
+  for (k = 0; k < 3; k++) s_pCkBase[k] = s_pTeamCk[team * 3 + k];
+}
+
+/* asm read-site trampoline calls this pointer */
+void (__near _cdecl *fpCockpitColCode)(void) = AHFCockpitColors;
+
+void CarCockpitInit(void)
+{
+  unsigned char *c0, *c1, *c2, *c3, *p;
+
+  if (s_ckLoaded < 1) return;              /* no [CockpitColors] entries -> stock per-team */
+
+  /* Verify the stock instructions we read operands from and patch over. */
+  c0 = (unsigned char *)IDAtoFlat(0x69ED7);  /* 8B 35 <&p_CarInViewCS>  mov esi,p_CarInViewCS */
+  c1 = (unsigned char *)IDAtoFlat(0x69EDD);  /* 8A 46 25                mov al,[esi+25h]  (patch start) */
+  c2 = (unsigned char *)IDAtoFlat(0x69EEA);  /* 8A 90 <&arCockpitColors> */
+  c3 = (unsigned char *)IDAtoFlat(0x69EF0);  /* 88 15 <&byte_CA0A0> */
+  if (c0[0]!=0x8B||c0[1]!=0x35 || c1[0]!=0x8A||c1[1]!=0x46||c1[2]!=0x25 ||
+      c2[0]!=0x8A||c2[1]!=0x90 || c3[0]!=0x88||c3[1]!=0x15) {
+    LogLine("- CarCkpit: opcode mismatch at rUpdCarsCockpit; DISABLED\n");
+    return;
+  }
+  s_pCarView = (unsigned char **)IDACodeReftoDataRef(0x69ED9);  /* &p_CarInViewCS */
+  s_pTeamCk  = (unsigned char  *)IDACodeReftoDataRef(0x69EEC);  /* &arCockpitColors (per-team) */
+  s_pCkBase  = (unsigned char  *)IDACodeReftoDataRef(0x69EF2);  /* &byte_CA0A0 (3 active bases) */
+
+  /* Replace the 49-byte per-team computation (0x69EDD..0x69F0D) with
+     "call MyCockpitColors" + NOP padding. The following "call sub_713EC" (cockpit
+     redraw) at 0x69F0E is left intact, so our bases are in place before the redraw. */
+  p = (unsigned char *)IDAtoFlat(0x69EDD);
+  p[0] = 0xE8;                                                  /* call rel32 */
+  *(long *)(p + 1) = (long)((unsigned long)MyCockpitColors - (unsigned long)(p + 5));
+  memset(p + 5, 0x90, 49 - 5);                                  /* NOP the displaced bytes */
+
+  PerCarCockpit = 1;
+  sprintf(strbuf, "- CarCkpit: ON, %d car colour(s) loaded\n", s_ckLoaded);
+  LogLine(strbuf);
+}

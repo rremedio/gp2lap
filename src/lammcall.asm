@@ -10,6 +10,7 @@ _TEXT   SEGMENT BYTE PUBLIC USE32 'CODE'
 
         PUBLIC  RcvGP2Call_
         PUBLIC  MyCompoundToBL_
+        PUBLIC  MyCockpitColors_
 
         EXTRN   _GP2_Found              :dword
         EXTRN   _GP2_FoundAdr           :dword
@@ -59,6 +60,7 @@ _TEXT   SEGMENT BYTE PUBLIC USE32 'CODE'
         EXTRN   _fpInitGP2Code          :dword
         EXTRN   _fpPrfCode              :dword
         EXTRN   _fpCarTexCode           :dword
+        EXTRN   _fpCockpitColCode       :dword
 
         EXTRN   _pSessionMode           :dword
         EXTRN   _pIsReplay              :dword
@@ -786,6 +788,23 @@ Mctb_got:
                 pop     eax
                 retn
 MyCompoundToBL_ endp
+
+;-------------------------------------------------------------------
+; 2026 --- per-car cockpit colour read-site helper ------------------
+; Patched (by CarCockpitInit, when [CockpitColors] entries exist) over
+; the per-team computation inside rUpdCarsCockpit (IDA 0x69EDD, 49 bytes
+; replaced by "call MyCockpitColors" + NOPs). Sets byte_CA0A0/A1/A2 for
+; the cockpit car (per-car override, else stock per-team) and returns,
+; clobbering nothing; execution then falls through to the stock cockpit
+; redraw (call sub_713EC @0x69F0E).
+MyCockpitColors_ proc    near
+                pushfd
+                pushad
+                call    dword ptr ds:_fpCockpitColCode
+                popad
+                popfd
+                retn
+MyCockpitColors_ endp
 
 _TEXT   ENDS
         END

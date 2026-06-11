@@ -586,6 +586,8 @@ void __near _cdecl AHFAfterGp2Init(void)
 
   //--- 2026 --- per-car car textures (SeasonOverrides / override.cfg) ---
   CarTexInit();
+  //--- 2026 --- per-car cockpit colours ([CockpitColors] in the same file) ---
+  CarCockpitInit();
 
 #ifdef TEST
   //--- 10/98 --- dump the Strings ---------

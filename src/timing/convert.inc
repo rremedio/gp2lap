@@ -528,9 +528,12 @@ void __near _cdecl AHFAfterGp2Init(void)
              a data-delta scan each cover only part of the image and missed the real reference. Instead
              scan the whole contiguous loaded image BY VALUE (delta-independent): from the object-1 code
              start up to the read buffer, repoint every dword aimed at a buffer base, the t_interobjs
-             array (0x44-wide window, just below t_LoadedTrkData), or the read-buffer +0x1000/+0x1020
-             header pointer. Buffer bodies are skipped; exact-value match keeps false positives ~0
-             (6 MB x ~e-9). The 14 known refs + 0xF9CC0 are already newLoaded/newRead so won't re-match. */
+             array base, or the read-buffer +0x1000/+0x1020 header pointer. Buffer bodies are skipped;
+             EXACT-value match only (every t_interobjs reference uses the array base -- the slot index
+             is always a runtime register -- so a value WINDOW is unnecessary and merely false-matches
+             unrelated dwords, e.g. a GP2Lap code hook's call rel32, corrupting it; exact match keeps
+             false positives ~0 at 6 MB x ~e-9). The 14 known refs + 0xF9CC0 are already
+             newLoaded/newRead so won't re-match. */
           {
             unsigned long flatLo  = (unsigned long)IDAtoFlat(0x10000); /* object-1 code start (mapped) */
             unsigned long flatHi  = oldRead;                           /* read buffer is last; all refs precede it */
@@ -541,7 +544,7 @@ void __near _cdecl AHFAfterGp2Init(void)
               if (p >= lbodyLo && p < lbodyHi) { p = lbodyHi - 1; continue; }  /* skip loaded-buf body */
               v = *(unsigned long *)p;
               if      (v == oldLoaded)            { *(unsigned long *)p = newLoaded; hL++; }
-              else if (v - oldInterobjs < 0x44UL) { *(unsigned long *)p = newInterobjs + (v - oldInterobjs); hI++; }
+              else if (v == oldInterobjs)         { *(unsigned long *)p = newInterobjs; hI++; }
               else if (v == oldRead)              { *(unsigned long *)p = newRead; hR++; }
               else if (v == oldRead + 0x1000UL)   { *(unsigned long *)p = newRead + 0x1000UL; hR++; }  /* pTrkHdrStart-style header alias */
               else if (v == oldRead + 0x1020UL)   { *(unsigned long *)p = newRead + 0x1020UL; hR++; }

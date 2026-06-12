@@ -35,7 +35,9 @@ static unsigned char *s_objBuf  = 0;             /* the live car object the engi
 static unsigned char *s_pristine = 0;            /* pristine stock object (for restore) */
 static unsigned long  s_ptsOff = 0;              /* points section offset within the object */
 static unsigned long  s_ptsSz  = 0;              /* points section size (bytes) */
-static int            s_curTeam = -1;            /* team whose points are currently in s_objBuf */
+static unsigned long  s_sclOff = 0;              /* scale-ramp section offset within the object */
+static unsigned long  s_sclSz  = 0;              /* scale-ramp section size (bytes) */
+static int            s_curTeam = -1;            /* team whose geometry is currently in s_objBuf */
 
 /* ---------------- tier 1: per-team nose ---------------- */
 
@@ -171,11 +173,13 @@ void __near _cdecl AHFCarShapeSwap(void)
   if (s_dat[team]) {                            /* this team has an override shape */
     if (s_curTeam != team) {
       memcpy(s_objBuf + s_ptsOff, s_dat[team] + s_ptsOff, s_ptsSz);   /* team vertices */
+      memcpy(s_objBuf + s_sclOff, s_dat[team] + s_sclOff, s_sclSz);   /* team scale ramp */
       s_curTeam = team;
     }
-  } else {                                      /* no override -> restore stock vertices */
+  } else {                                      /* no override -> restore stock geometry */
     if (s_curTeam != -1) {
       memcpy(s_objBuf + s_ptsOff, s_pristine + s_ptsOff, s_ptsSz);
+      memcpy(s_objBuf + s_sclOff, s_pristine + s_sclOff, s_sclSz);
       s_curTeam = -1;
     }
   }
@@ -226,9 +230,15 @@ static void CarShapeInitDat(const char *cfg)
      flat-pointer model: a sane offset confirms the header pointers are object-relative. */
   s_ptsOff = *(unsigned long *)(s_pristine + 0x10) - (unsigned long)s_objBuf;
   s_ptsSz  = *(unsigned long *)(s_pristine + 0x14) - *(unsigned long *)(s_pristine + 0x10);
-  if (s_ptsOff >= CS_OBJSZ || s_ptsSz == 0 || s_ptsOff + s_ptsSz > CS_OBJSZ) {
-    sprintf(strbuf, "- PerTeamShape: points section out of range (off=0x%lX sz=0x%lX); DISABLED\n",
-            s_ptsOff, s_ptsSz);
+  /* The scale ramp (+0x04 scaleBegin .. +0x08 scaleEnd) is the morph's other half -- the engine
+     offsets scaleBegin by stride*CB358 exactly like pointsBegin, so a custom shape needs its own
+     scale data too. It is pure 16-bit data (no pointers), so it is safe to swap the same way. */
+  s_sclOff = *(unsigned long *)(s_pristine + 0x04) - (unsigned long)s_objBuf;
+  s_sclSz  = *(unsigned long *)(s_pristine + 0x08) - *(unsigned long *)(s_pristine + 0x04);
+  if (s_ptsOff >= CS_OBJSZ || s_ptsSz == 0 || s_ptsOff + s_ptsSz > CS_OBJSZ ||
+      s_sclOff >= CS_OBJSZ || s_sclSz == 0 || s_sclOff + s_sclSz > CS_OBJSZ) {
+    sprintf(strbuf, "- PerTeamShape: section out of range (pts 0x%lX/0x%lX scl 0x%lX/0x%lX); DISABLED\n",
+            s_ptsOff, s_ptsSz, s_sclOff, s_sclSz);
     LogLine(strbuf);
     free(s_pristine); s_pristine = 0;
     CarShapeFreeDats();
@@ -236,8 +246,8 @@ static void CarShapeInitDat(const char *cfg)
   }
 
   PerTeamShape = 1;
-  sprintf(strbuf, "- PerTeamShape: ON (%d team shape(s), points off=0x%lX sz=0x%lX)\n",
-          loaded, s_ptsOff, s_ptsSz);
+  sprintf(strbuf, "- PerTeamShape: ON (%d shape(s), pts off=0x%lX sz=0x%lX, scl off=0x%lX sz=0x%lX)\n",
+          loaded, s_ptsOff, s_ptsSz, s_sclOff, s_sclSz);
   LogLine(strbuf);
 }
 

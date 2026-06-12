@@ -62,6 +62,8 @@ _TEXT   SEGMENT BYTE PUBLIC USE32 'CODE'
         EXTRN   _fpPrfCode              :dword
         EXTRN   _fpCarTexCode           :dword
         EXTRN   _fpCockpitColCode       :dword
+        EXTRN   _fpCarShapeCode         :dword
+        EXTRN   _CarShapeCarPtr         :dword
         EXTRN   _AILaunchFadeBuckets    :dword
 
         EXTRN   _pSessionMode           :dword
@@ -602,6 +604,20 @@ hcartex_pl:
 
 
 
+;------ Per-team car shape swap (before sub_677D0 / the t_interobjs[0] draw) -----
+Hook_CarShape:
+                pushfd
+                pushad
+                mov     ds:_CarShapeCarPtr, esi   ; stash the car being drawn (ESI)
+                call    dword ptr ds:_fpCarShapeCode   ; swap object geometry in place
+                popad
+                popfd
+hcarshape_pl:
+                call    CodeStub_       ; patched -> original sub_0_677D0 (team globals)
+                retn
+
+
+
 ;-----------------------------------------------------------------------------------
 ;
 ;       Hook tables
@@ -631,6 +647,7 @@ code_hooks:
                 dd      19f87h, swAlwaysTrue, Hook_Retire,      Hook_Retire     ; retire; (other check at 31916+...)
                 dd      1c8f9h, swAlwaysTrue, Hook_Prf,         Hook_Prf        ; perf data
                 dd      664c3h, swAlwaysTrue, Hook_CarTex,      hcartex_pl      ; per-car texture swap
+                dd      67a5fh, swAlwaysTrue, Hook_CarShape,    hcarshape_pl    ; per-team shape swap
                 dd      0
 ;!!!!!!!!
 ;WARNING: there's a second table in frankasm.inc. Check first for interferings...

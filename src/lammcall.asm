@@ -11,6 +11,7 @@ _TEXT   SEGMENT BYTE PUBLIC USE32 'CODE'
         PUBLIC  RcvGP2Call_
         PUBLIC  MyCompoundToBL_
         PUBLIC  MyCockpitColors_
+        PUBLIC  AccelEffHP_
 
         EXTRN   _GP2_Found              :dword
         EXTRN   _GP2_FoundAdr           :dword
@@ -61,6 +62,7 @@ _TEXT   SEGMENT BYTE PUBLIC USE32 'CODE'
         EXTRN   _fpPrfCode              :dword
         EXTRN   _fpCarTexCode           :dword
         EXTRN   _fpCockpitColCode       :dword
+        EXTRN   _AILaunchFadeBuckets    :dword
 
         EXTRN   _pSessionMode           :dword
         EXTRN   _pIsReplay              :dword
@@ -805,6 +807,42 @@ MyCockpitColors_ proc    near
                 popfd
                 retn
 MyCockpitColors_ endp
+
+;-------------------------------------------------------------------
+; 2026 --- AI low-HP launch fix: speed-faded effective engine power.
+; Patched (by AiLaunchFixInit, when AILowHpLaunchFix=1) over the 13-byte
+; enginePower multiply inside the AI accel apply (IDA 0x22F25). On entry
+;   EAX = accel accumulator, EBX = speed (|car.field_14|>>2), ESI = car.
+; Replaces "x enginePower >>14" with "x effHP >>14", where
+;   effHP = 0x4000 + (enginePower-0x4000) * min(EBX>>20, K) / K
+;   K = _AILaunchFadeBuckets (>=1, clamped at init).
+; So the HP scaling fades in with speed: reference power at a standstill
+; (no low-HP launch penalty), the car's real power by speed K. Returns the
+; scaled accumulator in EAX; preserves EBX/ECX/EBP/ESI (EDX is scratch,
+; overwritten by the next instruction at 0x22F32).
+AccelEffHP_     proc    near
+                push    ebx
+                push    ecx
+                push    eax                     ; save accel accumulator
+                mov     ecx, ds:_AILaunchFadeBuckets    ; K
+                shr     ebx, 14h                ; vb = speed bucket (EBX >> 20)
+                cmp     ebx, ecx
+                jb      short aef_havevb
+                mov     ebx, ecx                ; min(vb, K)
+aef_havevb:
+                movsx   eax, word ptr [esi+0A2h]        ; enginePower (signed)
+                sub     eax, 4000h              ; delta = HP - ref
+                imul    ebx                     ; EDX:EAX = delta * vb
+                idiv    ecx                     ; EAX = (delta * vb) / K
+                add     eax, 4000h              ; effHP
+                mov     ebx, eax                ; EBX = effHP
+                pop     eax                     ; restore accumulator
+                imul    ebx                     ; EDX:EAX = accumulator * effHP
+                shrd    eax, edx, 0Eh           ; EAX = (..) >> 14   (mirror of original)
+                pop     ecx
+                pop     ebx
+                retn
+AccelEffHP_     endp
 
 _TEXT   ENDS
         END

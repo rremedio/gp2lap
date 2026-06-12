@@ -14,6 +14,7 @@
 
 #include "../gp2rmcod.h"
 #include "../cartex.h"   // 2026: per-car car textures
+#include "../aiaccel.h"  // 2026: AI low-HP launch fix
 
 unsigned char *GP2_use_svga = NULL;
 unsigned char *GP2_RaceMode = NULL;
@@ -588,6 +589,8 @@ void __near _cdecl AHFAfterGp2Init(void)
   CarTexInit();
   //--- 2026 --- per-car cockpit colours ([CockpitColors] in the same file) ---
   CarCockpitInit();
+  //--- 2026 --- AI low-HP "slow launch" fix (speed-faded effective engine power) ---
+  AiLaunchFixInit();
 
 #ifdef TEST
   //--- 10/98 --- dump the Strings ---------

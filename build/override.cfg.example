@@ -21,6 +21,15 @@
 ; Group the file however you like -- by team is handy. Example:
 ;==========================================================================
 
+;--- Pit stops (global; affects AI and player; omit a key to keep it stock) ---
+; PitTyreChangeMs    = 7000      ; tyre-change base time in ms (stock 7000)
+; PitDamageRepairMs  = 18000     ; damage-repair base time in ms (stock 18000)
+; PitRefuelBaseMs    = 2750      ; fixed per-stop refuel overhead in ms (stock 2750)
+; PitRefuelCapMs     = 20000     ; max refuel duration cap in ms (stock 20000)
+; PitRefuelSpeed     = 100       ; refuel speed, % of stock (200 = twice as fast / half time)
+; DisableRefuel      = 0         ; 1 = cars start full and add no fuel (tyre stops still happen)
+;==========================================================================
+
 ;--- Team 1 ---
 ; shape01 = shapes\01.dat        ; (per-team shape; coming later)
 nose01 = 1

@@ -27,6 +27,10 @@ itemdef items[] = {         // item names are case insensitive
     //[TEXTURES]
     NULL, ULONGTYPE,  "JamTextureExtraMB",
 
+    //[AI]
+    NULL, ULONGTYPE,  "AILowHpLaunchFix",
+    NULL, ULONGTYPE,  "AILaunchFadeKmh",
+
     //[TRACK]
     NULL, ULONGTYPE,  "ExtraTrackSegments",
     NULL, ULONGTYPE,  "ExtraTrackFileKB",

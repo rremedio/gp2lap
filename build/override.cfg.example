@@ -1,53 +1,39 @@
 ;==========================================================================
-; override.cfg  --  per-car overrides for GP2Lap (pointed to by SeasonOverrides)
+; override.cfg  --  per-car / per-team overrides (pointed to by SeasonOverrides)
 ;==========================================================================
-; Enable by setting, in gp2lap.cfg:
+; Turn this on in gp2lap.cfg:
 ;     SeasonOverrides = "override.cfg"
-; If that line is commented out, or this file is missing, the feature is OFF
-; and the game behaves stock.
+; A missing file, or a commented-out line, means that override stays stock.
+; Lines starting with ';' or '#' are comments. Order does not matter -- the
+; number in each key picks the target; anything you leave out is left stock.
 ;
-; Currently supported override: per-CAR car textures (liveries).
-;   carNN = <path to a BMP>
-;     NN   = the in-game CAR ID (1..40). The game shows the current car's
-;            name (when you switch cars) and number (in the cockpit), so you
-;            can confirm which ID is which driver visually.
-;     BMP  = a 256 x 164, 8-bit (256-colour) Windows BMP, in the same palette
-;            as the car JAM atlases (e.g. exported from GP2Edit). Paths are
-;            relative to the GP2 directory; '\' or '/' both work.
+; Keys:
+;   carNN   = path\to.bmp    per-CAR livery           (NN = car number, 1-40)
+;   cpNN    = a,b,c          per-CAR cockpit colours   (three palette indices, 0-255)
+;   shapeNN = path\to.dat    per-TEAM car shape        (NN = team number, 1-14)
+;   noseNN  = 0 | 1          per-TEAM nose             (0 = low nose, 1 = high nose)
 ;
-; A car with NO entry here renders stock (its team livery + its number).
-; A bad/missing/wrong-size BMP is skipped (logged) and that car stays stock.
-; Lines starting with ';', '#' or '[' are ignored.
+; Watch the two numbering schemes: car / cp are per CAR (1-40, the number the
+; game shows for each driver); shape / nose are per TEAM (1-14).
+;
+; Liveries are 256x164, 8-bit BMPs in the car-atlas palette (e.g. exported from
+; GP2Edit). Paths are relative to the GP2 folder; '\' or '/' both work.
+; Group the file however you like -- by team is handy. Example:
 ;==========================================================================
 
+;--- Team 1 ---
+; shape01 = shapes\01.dat        ; (per-team shape; coming later)
+nose01 = 1
 car01 = liv\01a.bmp
+cp01  = 1,1,1
 car02 = liv\01b.bmp
+cp02  = 1,1,1
+
+;--- Team 2 ---
+nose02 = 0
 car03 = liv\02a.bmp
-car04 = liv\02b.bmp
-; ... add the rest of your grid the same way (car05 = liv\03a.bmp, etc.)
+cp03  = 1,1,1
+car14 = liv\02b.bmp
+cp14  = 1,50,1
 
-;==========================================================================
-; cpNN  --  per-CAR cockpit colour scheme (stock is per-team)
-;==========================================================================
-; The in-cockpit dashboard/surround is recoloured from THREE palette-index
-; "bases" that shift three ramps of the shared cockpit image:
-;     base0 -> the 0x20..0x2F ramp      (16 shades)
-;     base1 -> the 0x30..0x3F ramp      (16 shades)
-;     base2 -> the 0x90..0xA3 ramp      (20 shades)
-; Each base is a palette index (0..255), written as decimal or 0xHH hex.
-;   cpNN = base0,base1,base2
-;     NN = the in-game CAR ID (1..40), same numbering as the textures above.
-; A car with NO cpNN entry keeps its stock per-TEAM cockpit colours.
-;
-; Stock per-TEAM bases, for reference (copy a team's triple as a starting
-; point for that team's drivers):
-;   Williams 0x10,0x90,0x10   Tyrrell  0x10,0x10,0x01   Benetton 0x7C,0x7C,0xD6
-;   McLaren  0x10,0x20,0x10   Footwork 0x10,0x10,0x90   Lotus    0x01,0x10,0x01
-;   Jordan   0xDA,0x20,0x90   Larrous  0x08,0x93,0x43   Minardi  0x94,0x94,0x01
-;   Ligier   0x20,0x20,0x01   Ferrari  0x01,0x01,0x01   Sauber   0x92,0x01,0x92
-;   Simtek   0x08,0x08,0x08   Pacific  0x20,0x20,0x20
-; (Confirm against your own carset -- an edited carset may differ.)
-;==========================================================================
-
-;cp01 = 0x10,0x90,0x10
-;cp02 = 0x7C,0x7C,0xD6
+; ... continue for the rest of the grid.

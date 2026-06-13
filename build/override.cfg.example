@@ -30,6 +30,15 @@
 ; DisableRefuel      = 0         ; 1 = cars start full and add no fuel (tyre stops still happen)
 ;==========================================================================
 
+;--- Per-team physics (NN = team 1-14; omit a key to leave that team on the exe value) ---
+; massNN = <kg>                 ; team chassis weight in kg (stock ~595); omit = exe's mass (your
+;                               ; edit respected). Affects player grip+accel and AI cornering grip.
+; downforceMultiplierNN = <pct> ; team downforce as % of stock (100 = stock, 1-200). Scales grip
+;                               ; (load) for player and AI cornering; drag is NOT touched.
+;   e.g.  mass11 = 588          ; Ferrari a touch lighter
+;         downforceMultiplier11 = 110   ; ...with 10% more downforce
+;==========================================================================
+
 ;--- Team 1 ---
 ; shape01 = shapes\01.dat        ; (per-team shape; coming later)
 nose01 = 1

@@ -103,18 +103,27 @@ void PitStopsInit(void)
     } else LogLine("- PitStops: refuel rate opcode mismatch; skipped\n");
   }
 
-  /* disable refuel: full starting fuel + add no fuel. In SetFuelLapsESI's race branch,
-     0x2C559 is `jnz loc_2C567` (75 0C): taken when numPitStops != 0 -> the STINT-fuel path;
-     the fall-through (numPitStops == 0) is the raceLaps+2 FULL-fuel path. NOP the jnz so every
-     car falls through to full fuel. (The doc's EB 0C was wrong -- it forces the stint path.)
-     Then 0x2C595 8A->C3 makes sub_2C58B return early, leaving dword_D5C46 (fuel to add) = 0. */
+  /* disable refuel -- three NOPs (let sub_2C58B RUN so the pit-stop index [esi+0xD7]++ still happens;
+     returning early made cars re-pit every other lap). We just neutralise the fuel writes:
+     (1) FULL START: SetFuelLapsESI's race branch 0x2C559 `jnz loc_2C567` (75 0C, taken when
+         numPitStops != 0 -> stint fuel); the fall-through (0 stops) is the raceLaps+2 FULL path.
+         NOP the jnz so every car starts full.
+     (2) NO DEFUEL: sub_2C58B rewrites the fuel load `mov [esi+0x306], ax` @0x2C631 to the planned
+         next-STINT amount -- less than a full tank -- so the stop would drop the car's fuel. NOP it so
+         the tank stays full through the stop.
+     (3) NO ADD: NOP the fuel-amount write `mov dword_D5C46, eax` @0x2C651 so D5C46 stays at its
+         entry-init 0. */
   if (hDis && disableRefuel) {
-    unsigned char *j = (unsigned char *)IDAtoFlat(0x2C559);
-    unsigned char *m = (unsigned char *)IDAtoFlat(0x2C595);
-    if (j[0] == 0x75 && j[1] == 0x0C && m[0] == 0x8A) {
-      j[0] = 0x90; j[1] = 0x90;     /* jnz -> nop nop: race branch falls through to full fuel */
-      m[0] = 0xC3;                  /* sub_2C58B retn early -> adds no fuel */
-      LogLine("- PitStops: refuel DISABLED (cars start full, add no fuel; tyre stops remain)\n");
+    unsigned char *j = (unsigned char *)IDAtoFlat(0x2C559);   /* jnz to stint-fuel    */
+    unsigned char *w = (unsigned char *)IDAtoFlat(0x2C631);   /* mov [esi+0x306], ax  */
+    unsigned char *z = (unsigned char *)IDAtoFlat(0x2C651);   /* mov dword_D5C46, eax */
+    if (j[0]==0x75 && j[1]==0x0C &&
+        w[0]==0x66 && w[1]==0x89 && w[2]==0x86 && w[3]==0x06 && w[4]==0x03 &&
+        z[0]==0xA3 && z[1]==0x46) {
+      j[0] = 0x90; j[1] = 0x90;     /* full start  */
+      memset(w, 0x90, 7);           /* no defuel: keep fuel load at full through the stop */
+      memset(z, 0x90, 5);           /* no add:     D5C46 stays 0 */
+      LogLine("- PitStops: refuel DISABLED (cars start full, no fuel change; tyre stops remain)\n");
       applied++;
     } else LogLine("- PitStops: DisableRefuel opcode mismatch; skipped\n");
   }

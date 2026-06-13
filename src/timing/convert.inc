@@ -16,6 +16,7 @@
 #include "../cartex.h"   // 2026: per-car car textures
 #include "../carshape.h" // 2026: per-team car shapes (nose / .dat)
 #include "../pitstops.h" // 2026: configurable pit-stop timing
+#include "../teamphys.h" // 2026: per-team mass + downforce
 #include "../aiaccel.h"  // 2026: AI low-HP launch fix
 
 unsigned char *GP2_use_svga = NULL;
@@ -598,6 +599,8 @@ void __near _cdecl AHFAfterGp2Init(void)
   CarShapeInit();
   //--- 2026 --- configurable pit-stop timing (keys in the SeasonOverrides file) ---
   PitStopsInit();
+  //--- 2026 --- per-team mass + downforce (keys in the SeasonOverrides file) ---
+  TeamPhysInit();
   //--- 2026 --- AI low-HP "slow launch" fix (speed-faded effective engine power) ---
   AiLaunchFixInit();
 

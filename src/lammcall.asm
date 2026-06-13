@@ -12,6 +12,8 @@ _TEXT   SEGMENT BYTE PUBLIC USE32 'CODE'
         PUBLIC  MyCompoundToBL_
         PUBLIC  MyCockpitColors_
         PUBLIC  AccelEffHP_
+        PUBLIC  MyTeamMass_
+        PUBLIC  MyScaleDF_
 
         EXTRN   _GP2_Found              :dword
         EXTRN   _GP2_FoundAdr           :dword
@@ -65,6 +67,9 @@ _TEXT   SEGMENT BYTE PUBLIC USE32 'CODE'
         EXTRN   _fpCarShapeCode         :dword
         EXTRN   _CarShapeCarPtr         :dword
         EXTRN   _AILaunchFadeBuckets    :dword
+        EXTRN   _TeamMassLbs            :dword
+        EXTRN   _TeamDFMult             :dword
+        EXTRN   _pCarStdWeight          :dword
 
         EXTRN   _pSessionMode           :dword
         EXTRN   _pIsReplay              :dword
@@ -860,6 +865,61 @@ aef_havevb:
                 pop     ebx
                 retn
 AccelEffHP_     endp
+
+;-------------------------------------------------------------------
+; 2026 --- per-team MASS. Patched over `add eax, d_carstdweight` @0x2C510
+; (FLoadToCarWght). On entry EAX = fuel weight, ESI = car. Adds the team's
+; chassis weight (TeamMassLbs[teamNr-1], lbs) if set, else the live
+; d_carstdweight (exe value, edited or not). Invalid teamNr (incl the
+; accel-table dummy, teamNr 0) -> stock. Only EAX changes.
+MyTeamMass_     proc    near
+                push    ecx
+                push    edx
+                movzx   ecx, byte ptr [esi+25h]     ; teamNr 1..14
+                dec     ecx                         ; 0-based
+                cmp     ecx, 14
+                jae     mtm_stock                   ; invalid / dummy -> stock
+                mov     edx, ds:_TeamMassLbs[ecx*4]
+                test    edx, edx
+                jnz     mtm_add                     ; team overridden
+mtm_stock:
+                mov     edx, ds:_pCarStdWeight      ; &d_carstdweight
+                mov     edx, [edx]                  ; *d_carstdweight (live)
+mtm_add:
+                add     eax, edx
+                pop     edx
+                pop     ecx
+                retn
+MyTeamMass_     endp
+
+;-------------------------------------------------------------------
+; 2026 --- per-team DOWNFORCE. Patched over `mov eax,[esi+16Ch]` +
+; `mov [esi+4Eh],ax` (10 bytes) @0x168C7 in CalcWings?, after +0x170 (the
+; front/rear split) is computed -- so scaling +0x16C (the downforce
+; magnitude) keeps the balance and never touches +0x174 (drag). Scales by
+; TeamDFMult[teamNr-1] % (1..200) when set; copies the result to +0x4E.
+; Invalid teamNr (incl dummy) -> pass through unscaled. EAX dead after.
+MyScaleDF_      proc    near
+                push    ecx
+                push    edx
+                mov     eax, [esi+16Ch]             ; rear DF magnitude
+                movzx   ecx, byte ptr [esi+25h]     ; teamNr
+                dec     ecx
+                cmp     ecx, 14
+                jae     msd_copy                    ; invalid / dummy -> no scale
+                mov     edx, ds:_TeamDFMult[ecx*4]
+                test    edx, edx
+                jz      msd_copy                    ; team not overridden
+                imul    edx                         ; EDX:EAX = DF * pct
+                mov     ecx, 100
+                idiv    ecx                         ; EAX = DF*pct/100
+                mov     [esi+16Ch], eax             ; scaled magnitude
+msd_copy:
+                mov     [esi+4Eh], ax               ; +0x4E = (scaled|orig) low word
+                pop     edx
+                pop     ecx
+                retn
+MyScaleDF_      endp
 
 _TEXT   ENDS
         END

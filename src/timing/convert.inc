@@ -18,6 +18,7 @@
 #include "../pitstops.h" // 2026: configurable pit-stop timing
 #include "../teamphys.h" // 2026: per-team mass + downforce
 #include "../aiaccel.h"  // 2026: AI low-HP launch fix
+#include "../aibank.h"   // 2026: AI banking roll (cars roll onto banked track)
 
 unsigned char *GP2_use_svga = NULL;
 unsigned char *GP2_RaceMode = NULL;
@@ -603,6 +604,8 @@ void __near _cdecl AHFAfterGp2Init(void)
   TeamPhysInit();
   //--- 2026 --- AI low-HP "slow launch" fix (speed-faded effective engine power) ---
   AiLaunchFixInit();
+  //--- 2026 --- AI banking roll (drawn cars roll onto banked track sections) ---
+  AiBankingInit();
 
 #ifdef TEST
   //--- 10/98 --- dump the Strings ---------

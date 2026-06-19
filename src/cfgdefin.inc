@@ -30,6 +30,7 @@ itemdef items[] = {         // item names are case insensitive
     //[AI]
     NULL, ULONGTYPE,  "AILowHpLaunchFix",
     NULL, ULONGTYPE,  "AILaunchFadeKmh",
+    NULL, ULONGTYPE,  "AIBankingRoll",
 
     //[TRACK]
     NULL, ULONGTYPE,  "ExtraTrackSegments",

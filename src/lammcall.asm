@@ -14,6 +14,8 @@ _TEXT   SEGMENT BYTE PUBLIC USE32 'CODE'
         PUBLIC  AccelEffHP_
         PUBLIC  MyTeamMass_
         PUBLIC  MyScaleDF_
+        PUBLIC  BankRoll_
+        PUBLIC  CockpitRoll_
 
         EXTRN   _GP2_Found              :dword
         EXTRN   _GP2_FoundAdr           :dword
@@ -70,6 +72,8 @@ _TEXT   SEGMENT BYTE PUBLIC USE32 'CODE'
         EXTRN   _TeamMassLbs            :dword
         EXTRN   _TeamDFMult             :dword
         EXTRN   _pCarStdWeight          :dword
+        EXTRN   _pW173F8C               :dword
+        EXTRN   _pD40EC                 :dword
 
         EXTRN   _pSessionMode           :dword
         EXTRN   _pIsReplay              :dword
@@ -865,6 +869,54 @@ aef_havevb:
                 pop     ebx
                 retn
 AccelEffHP_     endp
+
+;-------------------------------------------------------------------
+; 2026 --- AI banking roll. Patched (by AiBankingInit, when AIBankingRoll=1)
+; over "mov dx,[esi+15Eh]" (66 8B 96 5E 01 00 00) at IDA 0x67C1A, in the per-car
+; drawer sub_0_67AC8. On entry ESI = the car struct being drawn; car+0x15E is the
+; body-roll angle that the model draw consumes. Reproduces the original load, then
+; adds the car's current segment banking (seg = [esi+10h], banking = [seg+0x26])
+; into the transient DX so the body rolls onto the banked surface. Banking is
+; already in model-angle units (raw add). Preserves all regs except DX; flags
+; restored. SIGN: '+'. If cars bank the wrong way in-game, change the add to "sub".
+; AI banking roll. Patched over "mov word_173F8C, bp" (66 89 2D ..) at IDA 0x67C2B, the
+; ROLL-angle slot in the per-car drawer (confirmed: a fixed value here visibly rolls the
+; car model). On entry BP = the original value (173FC8), ESI = car. Stores BP (original)
+; then SUBTRACTS the car's current segment banking (seg = [esi+10h], banking = [seg+0x26])
+; so the body leans onto the banked surface. Banking is already in model-angle units (raw).
+; SIGN: '+' (verified in-game: subtract rolled them out of the bank, add leans them in).
+; Self-disables on flat track (banking 0). Preserves all regs except the written global.
+BankRoll_       proc    near
+                push    eax
+                push    esi
+                mov     eax, [esi+10h]          ; eax = car -> current segment
+                mov     esi, ds:_pW173F8C       ; esi = &word_173F8C
+                mov     [esi], bp               ; word_173F8C = bp   (original store)
+                test    eax, eax
+                jz      br_done
+                mov     ax, [eax+26h]           ; ax = banking (tseg+0x26)
+                add     [esi], ax               ; word_173F8C += banking   (sign verified in-game)
+br_done:
+                pop     esi
+                pop     eax
+                retn
+BankRoll_       endp
+
+;-------------------------------------------------------------------
+; 2026 --- AI banking roll, COCKPIT camera. Patched over "mov word_D40EC, ax"
+; (66 A3 EC 40 0D 00) at IDA 0x383B9 in sub_0_38365 (view-angle load). On entry
+; AX = word_173FC8 (the native cockpit camera roll = elevation + 1x banking), EDI =
+; the player car's segment ([p_CarInViewCS+0x10], set @0x3836B and preserved). Adds the
+; segment banking so word_D40EC = 173FC8 + banking -- the cockpit view rolls the same as
+; the player car model (word_173F8C). Cockpit-only: TV/external handlers zero word_F9CF0.
+CockpitRoll_    proc    near
+                add     ax, [edi+26h]           ; ax += banking (player seg)   <-- flip to "sub" if inverted
+                push    esi
+                mov     esi, ds:_pD40EC         ; flat &word_D40EC
+                mov     [esi], ax               ; word_D40EC = ax  (16-bit, mirrors 66 A3)
+                pop     esi
+                retn
+CockpitRoll_    endp
 
 ;-------------------------------------------------------------------
 ; 2026 --- per-team MASS. Patched over `add eax, d_carstdweight` @0x2C510

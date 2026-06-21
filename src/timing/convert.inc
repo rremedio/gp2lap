@@ -371,9 +371,19 @@ void __near _cdecl AHFAfterGp2Init(void)
     static const unsigned long segPre[]     = { 0x732B0UL, 0x7346EUL, 0x777D3UL };
     static const unsigned long segEnd[]      = { 0x73787UL, 0x738CFUL, 0x77148UL, 0x77211UL };
     static const unsigned long segEndPlus[]  = { 0x732B9UL };
-    const unsigned long *grp[4];
-    unsigned long ov[4], nv[4];
-    int cnt[4];
+    /* The save-game pointer normalizer (NormaliseCarStruct / sub_0_6BE6A) converts segment
+       pointers <-> indices using a SEPARATE base: osSegments = t_TrackSegs - 0x70 (IDA 0x146CA4),
+       at 6 sites covering car.curSeg, car.pSeg2 and the D479C seg-ptr table. The value-matched
+       patch above never touches 0x146CA4, so with the buffer relocated these normalize car.curSeg
+       against the OLD base -> wrong/zero base -> the per-tick seg-tracking search (sub_0_1409A ->
+       sub_0_1427D) underflows to -0x6C -> illegal read (long-track crash after a save/checkpoint).
+       Relocate osSegments to newBase - 0x70 so the index math round-trips with the new buffer. */
+    static const unsigned long segOs[]       = {
+      0x6BE84UL, 0x6BECEUL, 0x6BF08UL, 0x6BF0FUL, 0x6BFCBUL, 0x6BFD2UL
+    };
+    const unsigned long *grp[5];
+    unsigned long ov[5], nv[5];
+    int cnt[5];
     unsigned long extra, newN, oldBase, newBase, bytes;
     unsigned char *bb;
     unsigned long ddelta;
@@ -396,11 +406,17 @@ void __near _cdecl AHFAfterGp2Init(void)
         sprintf(strbuf, "- ExtraTrackSegments: alloc of %lu KB FAILED; stock 1600 segs\n", bytes >> 10);
         LogLine(strbuf);
       } else {
+        /* Stock's seg buffer is a static, ZERO-initialized array; malloc is not. A long track
+           leaves a large uninitialized tail (segs > track count) + pre-slot/sentinel = raw garbage,
+           which any one-past-the-end read turns into a wild pointer (illegal read) or a zero/garbage
+           divisor (divide-by-zero). Replicate stock by zeroing. (Init-time only -> covers the first
+           track; a later shorter track keeps stale tail data, acceptable for now.) */
+        memset(bb, 0, bytes);
         newBase = (unsigned long)bb + 0x6CUL;
         /* Static-only DATA base pointer(s) share t_TrackSegs's data delta and must move too.
            pFirstSegSect1 (IDA 0xF9CE0) is NEVER runtime-written -> it stays = oldBase unless we
-           relocate it (this was the crash: seg-0 base left in the old buffer). pFirstSegPitl
-           (0xF9CDC) is runtime-set, relocated here only for init consistency. */
+           relocate it (else seg-0 base is left in the old buffer). pFirstSegPitl (0xF9CDC) is
+           runtime-set, relocated here only for init consistency. */
         ddelta = oldBase - 0x146D14UL;
         pfss = (unsigned long *)(ddelta + 0xF9CE0UL);
         pfsp = (unsigned long *)(ddelta + 0xF9CDCUL);
@@ -408,9 +424,10 @@ void __near _cdecl AHFAfterGp2Init(void)
         grp[1]=segPre;     cnt[1]=3;  ov[1]=oldBase - 0x6CUL;    nv[1]=newBase - 0x6CUL;
         grp[2]=segEnd;     cnt[2]=4;  ov[2]=oldBase + 0x2A300UL; nv[2]=newBase + newN * 0x6CUL;
         grp[3]=segEndPlus; cnt[3]=1;  ov[3]=oldBase + 0x2A36CUL; nv[3]=newBase + (newN + 1) * 0x6CUL;
+        grp[4]=segOs;      cnt[4]=6;  ov[4]=oldBase - 0x70UL;    nv[4]=newBase - 0x70UL;
 
         ok = 1;                                   /* pass 1: verify every site holds its old value */
-        for (g = 0; g < 4 && ok; g++)
+        for (g = 0; g < 5 && ok; g++)
           for (i = 0; i < cnt[g]; i++)
             if (SegFindImm(grp[g][i], ov[g]) < 0) {
               sprintf(strbuf, "- ExtraTrackSegments: site 0x%lX (grp %d) mismatch; DISABLED\n",
@@ -425,20 +442,101 @@ void __near _cdecl AHFAfterGp2Init(void)
         if (!ok) {
           free(bb);
         } else {                                  /* pass 2: patch */
-          for (g = 0; g < 4; g++)
+          for (g = 0; g < 5; g++)
             for (i = 0; i < cnt[g]; i++) {
               off = SegFindImm(grp[g][i], ov[g]);
               *(unsigned long *)(IDAtoFlat(grp[g][i]) + off) = nv[g];
             }
-          *pfss = newBase;   /* relocate the static-only seg-0 base pointer (the crash fix) */
+          *pfss = newBase;   /* relocate the static-only seg-0 base pointer */
           *pfsp = newBase;
           /* GP2Lap captured pTrackSegs from the STOCK base via a data hook at attach (lammcall.asm,
              0x14178 -> 0x146D14). It is never refreshed, so the live track map (trackmap.c) + track.c
              would read the old, now-unused buffer -> empty map. Repoint it to the new base. */
           if (pTrackSegs) pTrackSegs = (GP2Seg *)newBase;
-          sprintf(strbuf, "- ExtraTrackSegments: +%lu -> %lu track+pit segs; buffer %lu KB @ 0x%08lX\n",
-                  extra, newN, bytes >> 10, (unsigned long)bb);
+          sprintf(strbuf, "- ExtraTrackSegments: +%lu -> %lu segs buffer @0x%08lX\n",
+                  extra, newN, newBase);
           LogLine(strbuf);
+
+          /* --- decouple the race-position list from the renderer's span scratch -------------
+             off_0_F9CCC -> unk_0_139228 (IDA 0x139228) is the position-ORDER list (26 car
+             offsets, source for t_TrackPosOfsTab), but GP2 ALSO uses unk_0_139228 as the
+             rasterizer's span scratch (writer sub_0_39838; consumers sub_0_42xxx/44xxx +
+             dword_FAA24). Stock time-multiplexes them; on a long track the render side leaves
+             span records in the buffer when the AI position readers consume it -> garbage car
+             offsets -> a misaligned car pointer -> a real car struct (car #4) gets stomped ->
+             illegal read / divide-by-zero. Give the position list its OWN buffer; the renderer
+             keeps unk_0_139228. Only two refs read the list off this base: the pointer
+             off_0_F9CCC (builders sub_0_2C039 / sub_0_2CD3F) and the literal at 0x2CFF2; every
+             other ref to unk_0_139228 is the renderer and is left untouched. */
+          {
+            unsigned long oldPos = ddelta + 0x139228UL;            /* runtime unk_0_139228   */
+            unsigned long *pPos  = (unsigned long *)(ddelta + 0xF9CCCUL);  /* off_0_F9CCC     */
+            int po = SegFindImm(0x2CFF2UL, oldPos);                /* the one literal list ref */
+            if (*pPos != oldPos || po < 0) {
+              LogLine("- ExtraTrackSegments: poslist decouple SKIPPED (ref mismatch)\n");
+            } else {
+              unsigned char *pb = (unsigned char *)malloc(0x100UL);
+              if (pb) {
+                int k;
+                memset(pb, 0, 0x100UL);
+                for (k = 0; k < 26; k++)
+                  *(unsigned short *)(pb + k * 2) = (unsigned short)(k * 0x330);
+                *pPos = (unsigned long)pb;                         /* off_0_F9CCC -> new buf  */
+                *(unsigned long *)(IDAtoFlat(0x2CFF2UL) + po) = (unsigned long)pb;  /* literal */
+                sprintf(strbuf, "- ExtraTrackSegments: poslist decoupled @0x%08lX (was 0x%08lX)\n",
+                        (unsigned long)pb, oldPos);
+                LogLine(strbuf);
+              }
+            }
+          }
+
+          /* --- relocate+enlarge the per-32-seg-chunk buffer unk_0_CDA48 (THE crash) ----------
+             unk_0_CDA48 (IDA 0xCDA48) is a spatial-acceleration array: ONE 4-byte entry per
+             32-segment chunk, indexed (seg+0x1A & 0x7FF)>>5. It is EXACTLY 50 entries (0xC8 B,
+             ending at 0xCDB10) and is immediately followed by byte_0_CDB10, word_0_CDB12 (=the
+             t_TrackPosOfsTab[-1] 0xFFFF terminator) and t_TrackPosOfsTab itself (0xCDB14). The
+             fill loop's bound is word_0_C7E32 = numTrackSegs/32; a DEAD clamp at 0x73782
+             (`cmp ax,32h; jle $+2`) was meant to cap it at 50 but does nothing. On a >1600-seg
+             track numTrackSegs/32 > 50, so chunks 50..63 write PAST the array -> stomp the
+             terminator + t_TrackPosOfsTab (entries become 0x3F00|n etc., term lost) -> the AI
+             position readers compute t_CarStructs+garbage -> a misaligned car pointer stomps a
+             real car (car #4) -> teleport / illegal read / divide-by-zero. word_0_C7E32 is ALSO
+             the ring modulus in the wrap math, so it can't just be clamped. Fix: move the array
+             to its own 64-entry (256-byte) buffer -- 64 covers the full (&0x7FF)>>5 index range,
+             so it can never overflow for any track. byte_0_CDB10/word_0_CDB12/t_TrackPosOfsTab
+             stay put and are no longer reachable by chunk-array writes. 9 refs (base +0/+1/+2). */
+          {
+            static const unsigned long chkAddr[] = {
+              0x32DA8UL, 0x32E70UL, 0x32F35UL, 0x32FB2UL, 0x330E3UL,  /* mov ebx,offset (imm@+1) */
+              0x74375UL,                                              /* init clear     (disp@+3) */
+              0x67499UL,                                              /* CDA49 byte     (disp@+2) */
+              0x55053UL, 0x674A4UL                                    /* CDA4A word     (disp@+3) */
+            };
+            static const int chkImmOff[] = { 1,1,1,1,1, 3, 2, 3,3 };
+            static const int chkField[]  = { 0,0,0,0,0, 0, 1, 2,2 };
+            unsigned long oldChk = ddelta + 0xCDA48UL;
+            int j, cok = 1;
+            for (j = 0; j < 9 && cok; j++) {
+              unsigned long *p = (unsigned long *)(IDAtoFlat(chkAddr[j]) + chkImmOff[j]);
+              if (*p != oldChk + (unsigned long)chkField[j]) {
+                sprintf(strbuf, "- ExtraTrackSegments: chunkbuf site 0x%lX mismatch (0x%08lX); SKIPPED\n",
+                        chkAddr[j], *p);
+                LogLine(strbuf); cok = 0;
+              }
+            }
+            if (cok) {
+              unsigned char *cb = (unsigned char *)malloc(0x100UL);   /* 64 entries * 4 = 256 B */
+              if (cb) {
+                memset(cb, 0, 0x100UL);
+                for (j = 0; j < 9; j++)
+                  *(unsigned long *)(IDAtoFlat(chkAddr[j]) + chkImmOff[j]) =
+                    (unsigned long)cb + (unsigned long)chkField[j];
+                sprintf(strbuf, "- ExtraTrackSegments: chunkbuf relocated @0x%08lX (was 0x%08lX)\n",
+                        (unsigned long)cb, oldChk);
+                LogLine(strbuf);
+              }
+            }
+          }
         }
       }
     }

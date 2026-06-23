@@ -80,7 +80,7 @@ OBJS=	$(OUTDIR)\gp2lap.obj $(OUTDIR)\gp2hook.obj $(OUTDIR)\gp2log.obj			\
 		 $(OUTDIR)\trackmap.obj $(OUTDIR)\gp2glob.obj $(OUTDIR)\trackinf.obj	\
 		 $(OUTDIR)\carinfo.obj $(OUTDIR)\keyqueue.obj $(OUTDIR)\keyhand.obj		\
 		 $(OUTDIR)\gp2pics.obj $(OUTDIR)\gp2misc.obj $(OUTDIR)\gp2str.obj		\
-		 $(OUTDIR)\prflog.obj $(OUTDIR)\cartex.obj $(OUTDIR)\aiaccel.obj $(OUTDIR)\carshape.obj $(OUTDIR)\pitstops.obj $(OUTDIR)\teamphys.obj
+		 $(OUTDIR)\prflog.obj $(OUTDIR)\cartex.obj $(OUTDIR)\aiaccel.obj $(OUTDIR)\carshape.obj $(OUTDIR)\pitstops.obj $(OUTDIR)\teamphys.obj $(OUTDIR)\override.obj
 
 !ifdef AUTH
 OBJS=$(OBJS) $(OUTDIR)\auth.obj

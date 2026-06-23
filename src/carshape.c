@@ -5,6 +5,7 @@
 #include "miscahf.h"        // IDAtoFlat, IDACodeReftoDataRef
 #include "cfgmain.h"        // GetCfgString
 #include "basiclog.h"       // LogLine / strbuf
+#include "override.h"       // shared SeasonOverrides model ([Team N] shape/nose)
 
 /* Per-team car-shape overrides, read from override.cfg (SeasonOverrides). Two tiers:
    Tier 1 (noseNN): the per-team low/high nose, picked from the static 14-dword table dword_CB394
@@ -41,34 +42,6 @@ static int            s_curTeam = -1;            /* team whose geometry is curre
 
 /* ---------------- tier 1: per-team nose ---------------- */
 
-static int CarShapeParseNose(const char *cfgpath, unsigned char *nose, unsigned char *set)
-{
-  FILE *f;
-  char line[300];
-  int loaded = 0;
-
-  f = fopen(cfgpath, "rb");
-  if (!f) return 0;
-  while (fgets(line, sizeof(line), f)) {
-    char *p = line, *eq, *v;
-    int team;
-    while (*p == ' ' || *p == '\t') p++;
-    if (*p==';' || *p=='#' || *p=='[' || *p=='\r' || *p=='\n' || *p==0) continue;
-    if ((p[0]|0x20)!='n' || (p[1]|0x20)!='o' || (p[2]|0x20)!='s' || (p[3]|0x20)!='e') continue;
-    team = atoi(p + 4);
-    if (team < 1 || team > CS_TEAMS) continue;
-    eq = strchr(p, '=');
-    if (!eq) continue;
-    v = eq + 1;
-    while (*v == ' ' || *v == '\t') v++;
-    nose[team-1] = (atoi(v) != 0) ? 1 : 0;     /* 0 = low nose, anything else = high */
-    set[team-1] = 1;
-    loaded++;
-  }
-  fclose(f);
-  return loaded;
-}
-
 static void CarShapeInitNose(const char *cfg)
 {
   unsigned char nose[CS_TEAMS], set[CS_TEAMS], *site;
@@ -76,7 +49,11 @@ static void CarShapeInitNose(const char *cfg)
   int i, loaded;
 
   for (i = 0; i < CS_TEAMS; i++) { nose[i] = 0; set[i] = 0; }
-  loaded = CarShapeParseNose(cfg, nose, set);
+  loaded = 0;
+  for (i = 0; i < CS_TEAMS; i++) {
+    const OvTeam *t = OverrideTeam(i + 1);
+    if (t->noseSet) { nose[i] = (unsigned char)t->nose; set[i] = 1; loaded++; }
+  }
   if (loaded < 1) return;
 
   /* dword_CB394 read in sub_677D0:  00067818  8B 04 95 <disp32>  mov eax, dword_CB394[edx*4]
@@ -125,35 +102,15 @@ static unsigned char *CarShapeLoadDat(const char *path)
 
 static int CarShapeLoadDats(const char *cfgpath)
 {
-  FILE *f;
-  char line[300], path[256];
-  int loaded = 0;
-
-  f = fopen(cfgpath, "rb");
-  if (!f) return 0;
-  while (fgets(line, sizeof(line), f)) {
-    char *p = line, *eq, *v, *e;
-    int team;
-    while (*p == ' ' || *p == '\t') p++;
-    if (*p==';' || *p=='#' || *p=='[' || *p=='\r' || *p=='\n' || *p==0) continue;
-    if ((p[0]|0x20)!='s' || (p[1]|0x20)!='h' || (p[2]|0x20)!='a' ||
-        (p[3]|0x20)!='p' || (p[4]|0x20)!='e') continue;
-    team = atoi(p + 5);
-    if (team < 1 || team > CS_TEAMS) continue;
-    eq = strchr(p, '=');
-    if (!eq) continue;
-    v = eq + 1;
-    while (*v == ' ' || *v == '\t' || *v == '"') v++;
-    strncpy(path, v, sizeof(path) - 1); path[sizeof(path) - 1] = 0;
-    e = path + strlen(path);
-    while (e > path && (e[-1]=='\r'||e[-1]=='\n'||e[-1]==' '||e[-1]=='\t'||e[-1]=='"')) *--e = 0;
-    if (!path[0]) continue;
+  int team, loaded = 0;
+  for (team = 1; team <= CS_TEAMS; team++) {
+    const OvTeam *t = OverrideTeam(team);
+    if (!t->shapeSet || !t->shape[0]) continue;
     if (s_dat[team-1]) { free(s_dat[team-1]); s_dat[team-1] = 0; }
-    s_dat[team-1] = CarShapeLoadDat(path);
+    s_dat[team-1] = CarShapeLoadDat(t->shape);
     if (s_dat[team-1]) { loaded++;
-      sprintf(strbuf, "- PerTeamShape: team%02d <- %s\n", team, path); LogLine(strbuf); }
+      sprintf(strbuf, "- PerTeamShape: team%02d <- %s\n", team, t->shape); LogLine(strbuf); }
   }
-  fclose(f);
   return loaded;
 }
 

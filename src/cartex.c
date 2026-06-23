@@ -5,6 +5,7 @@
 #include "miscahf.h"        // IDAtoFlat, IDACodeReftoDataRef
 #include "cfgmain.h"        // GetCfgString
 #include "basiclog.h"       // LogLine / strbuf
+#include "override.h"       // shared SeasonOverrides model (per-car livery/cockpit)
 #include "svga/svgabmp.h"   // readstream_svgabmp
 #include "gp2hook.h"        // dwTrackChecksum
 
@@ -68,71 +69,6 @@ static unsigned char *CarTexLoadBmp(const char *path)
   return buf;
 }
 
-/* Parse override.cfg: flat keys, no sections. "carNN = path" is a livery BMP; "cpNN = b0,b1,b2"
-   is a per-car cockpit colour triple (palette indices, hex 0x.. or decimal). ';'/'#'/'[' lines are
-   ignored. Returns number of car images loaded; cockpit count goes to s_ckLoaded. */
-static int CarTexParse(const char *cfgpath)
-{
-  FILE *f;
-  char line[300], path[256];
-  int loaded = 0;
-
-  f = fopen(cfgpath, "rb");
-  if (!f) { sprintf(strbuf, "- CarTex: SeasonOverrides file '%s' not found; disabled\n", cfgpath);
-            LogLine(strbuf); return 0; }
-
-  while (fgets(line, sizeof(line), f)) {
-    char *p = line, *eq, *v, *e, *q;
-    int carId, i;
-    long b[3];
-    while (*p == ' ' || *p == '\t') p++;
-    if (*p == ';' || *p == '#' || *p == '[' || *p == '\r' || *p == '\n' || *p == 0) continue;
-    eq = strchr(p, '=');
-    if (!eq) continue;
-    v = eq + 1;
-    while (*v == ' ' || *v == '\t' || *v == '"') v++;
-
-    /* cockpit colour: "cpNN = b0,b1,b2" */
-    if ((p[0]|0x20)=='c' && (p[1]|0x20)=='p' && p[2]>='0' && p[2]<='9') {
-      carId = atoi(p + 2);
-      if (carId < 1 || carId >= CT_MAXCAR) continue;
-      q = v;
-      for (i = 0; i < 3; i++) {
-        b[i] = strtol(q, &q, 0);
-        if (b[i] < 0 || b[i] > 255) break;
-        while (*q == ' ' || *q == '\t') q++;
-        if (i < 2) { if (*q != ',') break; q++; while (*q == ' ' || *q == '\t') q++; }
-      }
-      if (i == 3) {
-        s_ckpit[carId][0] = (unsigned char)b[0];
-        s_ckpit[carId][1] = (unsigned char)b[1];
-        s_ckpit[carId][2] = (unsigned char)b[2];
-        s_ckpitSet[carId] = 1; s_ckLoaded++;
-        sprintf(strbuf, "- CarCkpit: cp%02d <- %ld,%ld,%ld\n", carId, b[0], b[1], b[2]);
-        LogLine(strbuf);
-      } else {
-        sprintf(strbuf, "- CarCkpit: cp%02d bad colour triple; skipped\n", carId); LogLine(strbuf);
-      }
-      continue;
-    }
-
-    /* texture livery: "carNN = path" */
-    if ((p[0]|0x20) != 'c' || (p[1]|0x20) != 'a' || (p[2]|0x20) != 'r') continue;
-    carId = atoi(p + 3);
-    if (carId < 1 || carId >= CT_MAXCAR) continue;
-    strncpy(path, v, sizeof(path) - 1); path[sizeof(path) - 1] = 0;
-    e = path + strlen(path);
-    while (e > path && (e[-1]=='\r'||e[-1]=='\n'||e[-1]==' '||e[-1]=='\t'||e[-1]=='"')) *--e = 0;
-    if (!path[0]) continue;
-    if (s_img[carId]) { free(s_img[carId]); s_img[carId] = 0; }
-    s_img[carId] = CarTexLoadBmp(path);
-    if (s_img[carId]) { loaded++;
-      sprintf(strbuf, "- CarTex: car%02d <- %s\n", carId, path); LogLine(strbuf); }
-  }
-  fclose(f);
-  return loaded;
-}
-
 void CarTexInit(void)
 {
   char *cfg;
@@ -142,7 +78,16 @@ void CarTexInit(void)
   cfg = GetCfgString("SeasonOverrides");
   if (!cfg || !cfg[0]) return;                 /* key absent -> feature off */
 
-  loaded = CarTexParse(cfg);
+  loaded = 0;                                  /* pull resolved liveries from the shared model */
+  for (i = 1; i < CT_MAXCAR; i++) {
+    const OvCar *o = OverrideCar(i);
+    if (o && o->liverySet && o->livery[0]) {
+      if (s_img[i]) { free(s_img[i]); s_img[i] = 0; }
+      s_img[i] = CarTexLoadBmp(o->livery);
+      if (s_img[i]) { loaded++;
+        sprintf(strbuf, "- CarTex: car%02d <- %s\n", i, o->livery); LogLine(strbuf); }
+    }
+  }
   if (loaded < 1) { LogLine("- CarTex: no car images loaded; disabled\n"); return; }
 
   /* Bootstrap GP2 data globals from operands inside sub_65D3B (atlas resolve) and
@@ -335,8 +280,18 @@ void (__near _cdecl *fpCockpitColCode)(void) = AHFCockpitColors;
 void CarCockpitInit(void)
 {
   unsigned char *c0, *c1, *c2, *c3, *p;
+  int i;
 
-  if (s_ckLoaded < 1) return;              /* no [CockpitColors] entries -> stock per-team */
+  s_ckLoaded = 0;                          /* pull resolved cockpit colours from the shared model */
+  for (i = 1; i < CT_MAXCAR; i++) {
+    const OvCar *o = OverrideCar(i);
+    if (o && o->cpSet) {
+      s_ckpit[i][0] = o->cp[0]; s_ckpit[i][1] = o->cp[1]; s_ckpit[i][2] = o->cp[2];
+      s_ckpitSet[i] = 1; s_ckLoaded++;
+      sprintf(strbuf, "- CarCkpit: cp%02d <- %u,%u,%u\n", i, o->cp[0], o->cp[1], o->cp[2]); LogLine(strbuf);
+    }
+  }
+  if (s_ckLoaded < 1) return;              /* no cockpit overrides -> stock per-team */
 
   /* Verify the stock instructions we read operands from and patch over. */
   c0 = (unsigned char *)IDAtoFlat(0x69ED7);  /* 8B 35 <&p_CarInViewCS>  mov esi,p_CarInViewCS */

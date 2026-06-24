@@ -19,6 +19,7 @@
 #include "../teamphys.h" // 2026: per-team mass + downforce
 #include "../aiaccel.h"  // 2026: AI low-HP launch fix
 #include "../aibank.h"   // 2026: AI banking roll (cars roll onto banked track)
+#include "../override.h" // 2026: shared SeasonOverrides parser/model (per-team sections)
 
 unsigned char *GP2_use_svga = NULL;
 unsigned char *GP2_RaceMode = NULL;
@@ -690,6 +691,9 @@ void __near _cdecl AHFAfterGp2Init(void)
     }
   }
 
+  //--- 2026 --- parse the SeasonOverrides file ONCE into the shared model (resolves
+  //---          car1/car2/cp1/cp2 to carIds via t_CaridTeamTab); consumers below query it ---
+  OverrideLoad();
   //--- 2026 --- per-car car textures (SeasonOverrides / override.cfg) ---
   CarTexInit();
   //--- 2026 --- per-car cockpit colours ([CockpitColors] in the same file) ---

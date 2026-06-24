@@ -1,57 +1,56 @@
 ;==========================================================================
-; override.cfg  --  per-car / per-team overrides (pointed to by SeasonOverrides)
+; override.cfg  --  per-team / global overrides (pointed to by SeasonOverrides)
 ;==========================================================================
 ; Turn this on in gp2lap.cfg:
 ;     SeasonOverrides = "override.cfg"
 ; A missing file, or a commented-out line, means that override stays stock.
-; Lines starting with ';' or '#' are comments. Order does not matter -- the
-; number in each key picks the target; anything you leave out is left stock.
+; Lines starting with ';' or '#' are comments. Keys are case-insensitive and
+; may appear in any order within their section; anything you leave out is left
+; stock. Paths are relative to the GP2 folder; '\' or '/' both work.
 ;
-; Keys:
-;   carNN   = path\to.bmp    per-CAR livery           (NN = car number, 1-40)
-;   cpNN    = a,b,c          per-CAR cockpit colours   (three palette indices, 0-255)
-;   shapeNN = path\to.dat    per-TEAM car shape        (NN = team number, 1-14)
-;   noseNN  = 0 | 1          per-TEAM nose             (0 = low nose, 1 = high nose)
+; The file is organised into INI-style sections:
 ;
-; Watch the two numbering schemes: car / cp are per CAR (1-40, the number the
-; game shows for each driver); shape / nose are per TEAM (1-14).
+;   [General]   global settings (pit/refuel; more over time)
+;   [Team N]    everything about team slot N (N = 1..14, the team ORDER -- the
+;               same order the teams appear in the exe). You never type car
+;               numbers: GP2Lap resolves a team's two drivers itself.
 ;
-; Liveries are 256x164, 8-bit BMPs in the car-atlas palette (e.g. exported from
-; GP2Edit). Paths are relative to the GP2 folder; '\' or '/' both work.
-; Group the file however you like -- by team is handy. Example:
+; Per-team keys:
+;   car1 / car2   = path\to.bmp   livery for the team's 1st / 2nd driver
+;   cp1  / cp2    = a,b,c          cockpit colours (three palette indices 0-255)
+;   shape         = path\to.dat    car shape (.dat object)
+;   nose          = 0 | 1          0 = low nose, 1 = high nose
+;   mass          = <kg>           chassis weight in kg (stock ~595)
+;   downforce     = <pct>          downforce as % of stock (100 = stock, 1-200)
+;
+; car1/cp1 = the team's first driver slot, car2/cp2 = the second. If a team has
+; only one driver (a slot is disabled in the exe), the key for the missing slot
+; is simply ignored (a note is logged) -- so for a 1-driver team you may need
+; car2 rather than car1 (see Osella below).
+;
+; Liveries are 256x164, 8-bit BMPs in the car-atlas palette (e.g. from GP2Edit).
 ;==========================================================================
 
-;--- Pit stops (global; affects AI and player; omit a key to keep it stock) ---
-; PitTyreChangeMs    = 7000      ; tyre-change base time in ms (stock 7000)
-; PitDamageRepairMs  = 18000     ; damage-repair base time in ms (stock 18000)
-; PitRefuelBaseMs    = 2750      ; fixed per-stop refuel overhead in ms (stock 2750)
-; PitRefuelCapMs     = 20000     ; max refuel duration cap in ms (stock 20000)
-; PitRefuelSpeed     = 100       ; refuel speed, % of stock (200 = twice as fast / half time)
-; DisableRefuel      = 0         ; 1 = cars start full and add no fuel (tyre stops still happen)
-;==========================================================================
+[General]
+; Pit stops (global; affects AI and player; omit a key to keep it stock)
+; PitTyreChangeMs   = 7000     ; tyre-change base time in ms (stock 7000)
+; PitDamageRepairMs = 18000    ; damage-repair base time in ms (stock 18000)
+; PitRefuelBaseMs   = 2750     ; fixed per-stop refuel overhead in ms (stock 2750)
+; PitRefuelCapMs    = 20000    ; max refuel duration cap in ms (stock 20000)
+; PitRefuelSpeed    = 100      ; refuel speed, % of stock (200 = twice as fast)
+; DisableRefuel     = 0        ; 1 = cars start full and add no fuel (tyre stops still happen)
 
-;--- Per-team physics (NN = team 1-14; omit a key to leave that team on the exe value) ---
-; massNN = <kg>                 ; team chassis weight in kg (stock ~595); omit = exe's mass (your
-;                               ; edit respected). Affects player grip+accel and AI cornering grip.
-; downforceMultiplierNN = <pct> ; team downforce as % of stock (100 = stock, 1-200). Scales grip
-;                               ; (load) for player and AI cornering; drag is NOT touched.
-;   e.g.  mass11 = 588          ; Ferrari a touch lighter
-;         downforceMultiplier11 = 110   ; ...with 10% more downforce
-;==========================================================================
+[Team 12]   ; Ferrari
+car1      = liv\ferrari_a.bmp
+car2      = liv\ferrari_b.bmp
+cp1       = 32,33,34
+cp2       = 32,33,34
+; shape   = shapes\ferrari.dat
+nose      = 1
+mass      = 588             ; a touch lighter than stock
+downforce = 110             ; ...with 10% more downforce
 
-;--- Team 1 ---
-; shape01 = shapes\01.dat        ; (per-team shape; coming later)
-nose01 = 1
-car01 = liv\01a.bmp
-cp01  = 1,1,1
-car02 = liv\01b.bmp
-cp02  = 1,1,1
+[Team 14]   ; Osella -- if its 1st driver is disabled in the exe, use car2
+car2      = liv\osella.bmp
 
-;--- Team 2 ---
-nose02 = 0
-car03 = liv\02a.bmp
-cp03  = 1,1,1
-car14 = liv\02b.bmp
-cp14  = 1,50,1
-
-; ... continue for the rest of the grid.
+; ... continue for the rest of the grid ([Team 1] .. [Team 14]).

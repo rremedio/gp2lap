@@ -3,8 +3,8 @@
 #include <string.h>
 #include "teamphys.h"
 #include "miscahf.h"        // IDAtoFlat, IDACodeReftoDataRef
-#include "cfgmain.h"        // GetCfgString
 #include "basiclog.h"       // LogLine / strbuf
+#include "override.h"       // shared SeasonOverrides model ([Team N] mass/downforce)
 
 /* Per-team mass + downforce. Both are overrides LAYERED on top of the EXE (set = override that team,
    unset = leave the exe alone), keyed on car.teamNr (+0x25). The asm stubs (lammcall.asm) read these
@@ -22,55 +22,28 @@ unsigned long *pCarStdWeight = 0;            /* &d_carstdweight (fallback for un
 extern void MyTeamMass(void);                /* asm: per-team chassis weight at 0x2C510 */
 extern void MyScaleDF(void);                 /* asm: per-team downforce scale at 0x168C7 */
 
-/* If left-trimmed 'p' starts with 'name' (case-insensitive) followed by a digit, set *team to that
-   number and return 1 (team validated 1..14). */
-static int TPKey(const char *p, const char *name, int *team)
-{
-  int i;
-  for (i = 0; name[i]; i++)
-    if ((p[i] | 0x20) != (name[i] | 0x20)) return 0;
-  if (p[i] < '0' || p[i] > '9') return 0;
-  *team = atoi(p + i);
-  return (*team >= 1 && *team <= TP_TEAMS);
-}
-
 void TeamPhysInit(void)
 {
-  char *cfg;
-  FILE *f;
-  char line[300];
   int i, anyMass = 0, anyDF = 0, applied = 0;
-
-  cfg = GetCfgString("SeasonOverrides");
-  if (!cfg || !cfg[0]) return;
 
   for (i = 0; i < TP_TEAMS; i++) { TeamMassLbs[i] = 0; TeamDFMult[i] = 0; }
 
-  f = fopen(cfg, "rb");
-  if (!f) return;
-  while (fgets(line, sizeof(line), f)) {
-    char *p = line, *eq, *v;
-    int team;
-    long val;
-    while (*p == ' ' || *p == '\t') p++;
-    if (*p==';' || *p=='#' || *p=='[' || *p=='\r' || *p=='\n' || *p==0) continue;
-    eq = strchr(p, '=');
-    if (!eq) continue;
-    v = eq + 1;
-    while (*v == ' ' || *v == '\t') v++;
-    val = strtol(v, (char **)0, 0);
-    if (TPKey(p, "mass", &team)) {
+  for (i = 1; i <= TP_TEAMS; i++) {
+    const OvTeam *t = OverrideTeam(i);
+    if (t->massSet) {
+      long val = t->mass;
       long lbs = (val * 2205L + 500L) / 1000L;        /* kg -> lbs (x2.205) */
       if (lbs < 1) lbs = 1;                           /* keep non-zero = "set" */
-      TeamMassLbs[team-1] = (unsigned long)lbs; anyMass = 1;
-      sprintf(strbuf, "- TeamPhys: team%02d mass %ld kg (%ld lb)\n", team, val, lbs); LogLine(strbuf);
-    } else if (TPKey(p, "downforcemultiplier", &team)) {
+      TeamMassLbs[i-1] = (unsigned long)lbs; anyMass = 1;
+      sprintf(strbuf, "- TeamPhys: team%02d mass %ld kg (%ld lb)\n", i, val, lbs); LogLine(strbuf);
+    }
+    if (t->dfSet) {
+      long val = t->downforce;
       if (val < 1) val = 1; if (val > 200) val = 200;
-      TeamDFMult[team-1] = (unsigned long)val; anyDF = 1;
-      sprintf(strbuf, "- TeamPhys: team%02d downforce %ld%%\n", team, val); LogLine(strbuf);
+      TeamDFMult[i-1] = (unsigned long)val; anyDF = 1;
+      sprintf(strbuf, "- TeamPhys: team%02d downforce %ld%%\n", i, val); LogLine(strbuf);
     }
   }
-  fclose(f);
 
   if (!anyMass && !anyDF) return;
 

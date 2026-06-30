@@ -16,6 +16,9 @@ _TEXT   SEGMENT BYTE PUBLIC USE32 'CODE'
         PUBLIC  MyScaleDF_
         PUBLIC  BankRoll_
         PUBLIC  CockpitRoll_
+        PUBLIC  MyRestoreGameState_
+        PUBLIC  GridCapCopyCount_
+        PUBLIC  GridCapFinalize_
 
         EXTRN   _GP2_Found              :dword
         EXTRN   _GP2_FoundAdr           :dword
@@ -74,6 +77,8 @@ _TEXT   SEGMENT BYTE PUBLIC USE32 'CODE'
         EXTRN   _pCarStdWeight          :dword
         EXTRN   _pW173F8C               :dword
         EXTRN   _pD40EC                 :dword
+        EXTRN   _fpDrvDataReapply       :dword
+        EXTRN   _RestoreGameStateAddr   :dword
 
         EXTRN   _pSessionMode           :dword
         EXTRN   _pIsReplay              :dword
@@ -972,6 +977,86 @@ msd_copy:
                 pop     ecx
                 retn
 MyScaleDF_      endp
+
+;-------------------------------------------------------------------
+; 2026 --- per-driver data: re-apply wrap on RestoreGameState.
+; Installed (by DriverDataInit, when any driver data is patched) over the three
+; 5-byte E8 calls to RestoreGameState (IDA 0x6B600 / 0x6BBFB / 0x6BE24), each
+; re-pointed at this stub. RestoreGameState overwrites the save block, which
+; contains t_DriverNames + t_CaridTeamTab; we call the original first (its flat
+; address lives in _RestoreGameStateAddr, stored at install time), then call the
+; C reapply which re-writes ONLY those two tables. EAX/flags after the original
+; are preserved across the reapply (pushad/pushfd) so the caller sees the stock
+; result of RestoreGameState. GP2 subs are register/stack-transparent across this
+; extra call frame (same convention the code_hooks "call original first" stubs rely on).
+MyRestoreGameState_ proc near
+                call    dword ptr ds:_RestoreGameStateAddr      ; original RestoreGameState
+                pushfd
+                pushad
+                call    dword ptr ds:_fpDrvDataReapply
+                popad
+                popfd
+                retn
+MyRestoreGameState_ endp
+
+;-------------------------------------------------------------------
+; 2026 --- small-grid support (AllowSmallGrid). Two stubs patched (by
+; GridCapInit) over the hard "26" literals in the race-grid finaliser
+; sub_0_2C19D, retargeting them to min(N,26) where N = w_NumCars_26_
+; (16-bit, via ds:_pNumCars). t_GridTable is reached via ds:_pCarIDs
+; (= IDA 0xCCB58, both resolved by WWPatchDataHooks). For a full field
+; (N>=26) both are exact no-ops -> stock behaviour preserved.
+
+; Replaces "mov ecx,26" @0x2C1AD (the t_CarStartOrder->t_GridTable copy
+; count). Sets ECX = min(w_NumCars_26_,26). The original mov set no flags
+; the following code relied on (the loop body re-tests), but we still keep
+; the caller's flags + EDX intact. ECX is the intended output.
+GridCapCopyCount_ proc near
+                push    edx
+                pushfd
+                mov     edx, ds:_pNumCars       ; &w_NumCars_26_
+                movzx   ecx, word ptr [edx]     ; ECX = N (zero-extended 16-bit)
+                cmp     ecx, 26
+                jbe     short gccc_ok
+                mov     ecx, 26                 ; min(N,26)
+gccc_ok:
+                popfd
+                pop     edx
+                retn
+GridCapCopyCount_ endp
+
+; Replaces "mov w_NumCars_26_,26" (9 bytes) @0x2C1C7. Writes
+; w_NumCars_26_ = min(N,26) and zeroes t_GridTable[field..25] so the
+; trailing grid slots become empty (carId 0) instead of stale phantoms.
+; The original instruction only touched memory, so all GP registers and
+; flags are preserved here.
+GridCapFinalize_ proc near
+                push    eax
+                push    ecx
+                push    edx
+                pushfd
+                mov     edx, ds:_pNumCars       ; &w_NumCars_26_
+                movzx   eax, word ptr [edx]     ; EAX = N
+                cmp     eax, 26
+                jbe     short gcf_haveN
+                mov     eax, 26                 ; min(N,26)
+gcf_haveN:
+                mov     [edx], ax               ; w_NumCars_26_ = min(N,26) (16-bit)
+                mov     edx, ds:_pCarIDs        ; &t_GridTable (0xCCB58)
+                mov     ecx, eax                ; start index = field
+gcf_zloop:
+                cmp     ecx, 26
+                jae     short gcf_done
+                mov     byte ptr [edx+ecx], 0   ; t_GridTable[i] = 0 (empty slot)
+                inc     ecx
+                jmp     short gcf_zloop
+gcf_done:
+                popfd
+                pop     edx
+                pop     ecx
+                pop     eax
+                retn
+GridCapFinalize_ endp
 
 _TEXT   ENDS
         END

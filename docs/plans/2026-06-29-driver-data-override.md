@@ -2,6 +2,18 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
+> **AS-BUILT corrections (read first — supersede the task pseudocode below):**
+> 1. **Data tables are NOT reachable via `IDAtoFlat`** (that maps CODE addresses only; GP2 data sits at a
+>    different IDA base). Resolve them via GP2Lap's runtime pointers / a code operand, like
+>    `cartex.c`/`override.c`: names → `pDriverNames`; the skill/range/team-perf/reliability region →
+>    `pTeamHPQual` (= runtime `&0x174598`) + byte offsets (skill +0x50, range +0xF0, qual +0x28,
+>    reliability +0x190); `t_CaridTeamTab` → `IDACodeReftoDataRef(0x65D67)`; `t_PitCrewColors` →
+>    `IDACodeReftoDataRef(0x39208)`; car structs → `pCarStructs`. Use `IDAtoFlat` only for CODE
+>    (patch sites / reading code operands). Wherever a task below writes `IDAtoFlat(<dataAddr>)`, read it
+>    as the runtime-pointer form above.
+> 2. **Small grid (Task 8) is done by retiring the carId-0 tail, NOT by `min(N,26)` at the position
+>    pipeline.** See the rewritten Task 8.
+
 **Goal:** Load per-driver (name, skill qual+race, random range B + weight A, number, selected, disabled)
 and per-team (race/qual power, reliability, 14 pit-crew colours) data from the `SeasonOverrides` file, and
 make the engine tolerate <26 valid drivers, so a full carset can be authored without GP2Edit.
@@ -10,8 +22,9 @@ make the engine tolerate <26 valid drivers, so a full carset can be authored wit
 `tests/test_override.c`) with the new `[Team N]` keys, then add apply modules that patch GP2.EXE data
 tables at the `AHFAfterGp2Init` hook (and, where the per-event save reload requires it, re-apply after the
 reload). Per-driver number/selected/disabled collapse into one packed `t_CaridTeamTab` byte; per-driver
-name/skill/range/weight and per-team power/reliability/pit-crew are plain data-table writes via
-`IDAtoFlat`. The <26-grid fix redirects six hard-`26` code immediates to `min(N,26)`.
+name/skill/range/weight and per-team power/reliability/pit-crew are plain data-table writes (via the
+runtime data pointers — see AS-BUILT note above, not `IDAtoFlat`). The <26-grid fix makes the finaliser
+produce a carId-0 tail and then retires those tail cars via `flags_90` each frame (see Task 8).
 
 **Tech Stack:** C89 (Watcom `wcc386` for DOS; host build with `cc` for parser tests), x86 asm
 (`src/lammcall.asm` trampolines), DOS4G. Patch helpers `IDAtoFlat` / `IDACodeReftoDataRef` (`src/miscahf.c`).
@@ -304,23 +317,33 @@ before patching (follow the `cartex.c` verify-then-patch pattern).
 
 ---
 
-## Task 8: Grid-shrink fix (tolerate <26 valid drivers)
+## Task 8: Small-grid fix (tolerate <26 valid drivers) — AS BUILT
 
-Isolated, riskiest — its own test phase. Enables >2 disabled.
+Enables >2 disabled. Gated by cfg `AllowSmallGrid` (default off). Data-only, dynrec-safe.
 
-**Files:** Create `src/gridcap.c`/`.h` (or a block in `convert.inc`); `convert.inc`, `makefile*`.
+**Background (verified in-game):** the field is gated per-car by `flags_90` 0x80|0x20 (invisible +
+out-of-cockpit), honoured by all render/AI/standings/runners/end-of-race readers — NOT by the position-
+table length or `C9E40`. Non-race already retires inactive cars this way (`rCarRetires` in placement loop
+`sub_0_2C785`); the race branch activates all 26 and never retires → carId-0 phantoms. We replicate the
+non-race retirement.
 
-**Step 1:** Implement a hook that computes `count = min(validCount, 26)` where `validCount` = the value
-`sub_14EB4` already wrote to `w_NumCars_26_` before finalize. Redirect the six hard-`26` sites
-(`0x2C1AD` copy loop, `0x2C1C7` field-size, `0x14E0F` `InitCarStructs`, `0x2C320` `CopyWhatTable`,
-leader-search ~`0x14F87`, results `0x82A3D`) to honour `count`. Recommended: trampoline in/after
-`sub_2C19D` to write `min(N,26)` and drive the copy; patch the remaining immediates to read
-`w_NumCars_26_`. Zero `t_GridTable[count..25]` defensively. **Verify each stock immediate before
-patching; all-or-nothing.**
+**Files:** `src/gridcap.c`/`.h`, `src/lammcall.asm` (the two finaliser stubs), `src/gp2hook.c` (EOFHook
+call), `src/cfgdefin.inc` (`AllowSmallGrid`), `convert.inc`, `makefile*`.
 
-**Step 2: Build.** **Step 3: In-game** — disable 3+ drivers; confirm a clean smaller grid (no phantom/
-duplicate cars, no crash) AND that a stock 0-disabled race is unchanged (fastest-26, 2 DNQ).
-**Step 4 (Commit checkpoint).**
+**Step 1 — finaliser stubs (startup code patches on `sub_0_2C19D`).** Verify-then-patch (all-or-nothing;
+note the `0x2C1C7` disp32 is the RELOCATED `&w_NumCars_26_` == `pNumCars`, not the IDA literal):
+- `0x2C1AD` `mov ecx,26` → `call GridCapCopyCount` (ECX = `min(w_NumCars_26_,26)`).
+- `0x2C1C7` `mov w_NumCars_26_,26` (9 bytes) → `call GridCapFinalize` + NOP pad: writes
+  `w_NumCars_26_ = min(N,26)` and zeroes `t_GridTable[N..25]` (so the tail structs `InitCarStructs`
+  builds get carId 0).
+
+**Step 2 — per-frame retire (`GridCapHideTail`, called from `EOFHook`, pure data).** When armed, scan
+`pCarStructs[0..25]`; for each car with `(id & 0x3F) == 0`, set `flags_90 |= 0x80|0x20`. Idempotent;
+self-scoping (only races have a carId-0 tail); no-op for a full field. **No position-pipeline / `C9E40`
+poking** — those are not the field pin and crash the recompiler.
+
+**Step 3: Build.** **Step 4: In-game** — disable 3+ drivers, race: clean N-car grid, no phantoms, no
+crash; stock 0–2 disabled unchanged. **Step 5 (Commit checkpoint).**
 
 ---
 
@@ -329,4 +352,3 @@ duplicate cars, no crash) AND that a stock 0-disabled race is unchanged (fastest
   championship accounting — all out of scope.
 - If Task 1 shows names/`t_CaridTeamTab` are reloaded per event, the per-event re-apply hook is shared by
   Tasks 5 (and any field found to be in the save block).
-</content>

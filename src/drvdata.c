@@ -2,20 +2,28 @@
 #include <stdlib.h>
 #include <string.h>
 #include "drvdata.h"
-#include "miscahf.h"        /* IDAtoFlat */
+#include "miscahf.h"        /* IDAtoFlat (CODE), IDACodeReftoDataRef (DATA) */
 #include "basiclog.h"       /* LogLine / strbuf */
 #include "override.h"       /* shared SeasonOverrides model ([Team N] per-driver keys) */
+#include "gp2def.h"         /* BYTE/DWORD/GP2LongName ... (types used by gp2glob.h) */
+#include "gp2glob.h"        /* pDriverNames (&t_DriverNames), pTeamHPQual (&0x174598) */
 
 /* Per-driver data override. Applies the resolved SeasonOverrides driver fields into GP2.EXE's
    own driver tables at late init (DriverDataInit), and re-applies the two tables that the
    savegame / network restore overwrites (DriverDataReapply). See drvdata.h + the docs. */
 
 /* IDA addresses of the GP2.EXE driver tables (write via IDAtoFlat; little-endian). */
-#define DD_NAMES   0x179026UL   /* t_DriverNames  40 x 24 bytes, NUL-terminated */
-#define DD_SKILL   0x1745E8UL   /* word_1745E8    40 x 4: qual @+0, race @+2     */
-#define DD_RNGWT   0x174688UL   /* word_174688    40 x 4: B/range @+0, A/wt @+2  */
-#define DD_TAB     0x178F9AUL   /* t_CaridTeamTab 40 bytes (carId|MP|selected)   */
-#define DD_RGS     0x6BD46UL    /* RestoreGameState (savegame/network restore)   */
+/* DATA tables are NOT reachable via IDAtoFlat (that maps CODE addresses). Resolve them
+   from GP2Lap's runtime data-hook globals / a code operand, like cartex.c/override.c:
+     t_DriverNames (0x179026)  -> pDriverNames                 (gp2glob)
+     0x174598 base             -> pTeamHPQual                  (gp2glob); siblings:
+       word_1745E8 skill        = +0x50  (qual @+0, race @+2, 4 bytes/driver)
+       word_174688 range/weight = +0xF0  (B/range @+0, A/weight @+2)
+     t_CaridTeamTab (0x178F9A) -> IDACodeReftoDataRef(0x65D67) (same as override.c) */
+#define DD_TABREF   0x65D67UL   /* code op whose operand = &t_CaridTeamTab */
+#define DD_SKILLOFS 0x50UL      /* word_1745E8 - 0x174598 */
+#define DD_RNGWTOFS 0xF0UL      /* word_174688 - 0x174598 */
+#define DD_RGS      0x6BD46UL   /* RestoreGameState (CODE; IDAtoFlat OK)          */
 
 #define DD_SKILLBIAS 0x3D87     /* 15751: skill rating bias added to clamped skill */
 
@@ -89,13 +97,20 @@ static void InstallRestoreHook(void)
 
 void DriverDataInit(void)
 {
-  unsigned char *tab   = IDAtoFlat(DD_TAB);
-  unsigned char *names = IDAtoFlat(DD_NAMES);
-  unsigned char *skill = IDAtoFlat(DD_SKILL);
-  unsigned char *rngwt = IDAtoFlat(DD_RNGWT);
+  unsigned char *tab   = (unsigned char *)IDACodeReftoDataRef(DD_TABREF); /* &t_CaridTeamTab */
+  unsigned char *names = (unsigned char *)pDriverNames;                   /* &t_DriverNames  */
+  unsigned char *perf  = (unsigned char *)pTeamHPQual;                    /* &0x174598       */
+  unsigned char *skill, *rngwt;
   unsigned char  stockTab[40];
   int used[OV_MAXCAR];
   int team, slot, i, idx, stockCid, cid, applied = 0, anyNum = 0;
+
+  if (!tab || !names || !perf) {
+    LogLine("- DriverData: data pointers unresolved; DISABLED\n");
+    return;
+  }
+  skill = perf + DD_SKILLOFS;   /* word_1745E8 */
+  rngwt = perf + DD_RNGWTOFS;   /* word_174688 */
 
   /* snapshot the stock table ONCE (resolve carIds from pre-override values) */
   for (i = 0; i < 40; i++) stockTab[i] = tab[i];
@@ -218,9 +233,11 @@ void DriverDataInit(void)
    from the asm wrap after the original RestoreGameState returns. */
 void __near _cdecl DriverDataReapply(void)
 {
-  unsigned char *tab   = IDAtoFlat(DD_TAB);
-  unsigned char *names = IDAtoFlat(DD_NAMES);
+  unsigned char *tab   = (unsigned char *)IDACodeReftoDataRef(DD_TABREF);  /* &t_CaridTeamTab */
+  unsigned char *names = (unsigned char *)pDriverNames;                    /* &t_DriverNames  */
   int i;
+
+  if (!tab || !names) return;
 
   for (i = 0; i < g_nSlots; i++) {
     DrvSlot *r = &g_slot[i];

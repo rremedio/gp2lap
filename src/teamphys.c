@@ -5,6 +5,8 @@
 #include "miscahf.h"        // IDAtoFlat, IDACodeReftoDataRef
 #include "basiclog.h"       // LogLine / strbuf
 #include "override.h"       // shared SeasonOverrides model ([Team N] mass/downforce)
+#include "gp2def.h"         // BYTE/DWORD/... (types used by gp2glob.h)
+#include "gp2glob.h"        // pTeamHPQual (&0x174598 = team perf/skill/reliability base)
 
 /* Per-team mass + downforce. Both are overrides LAYERED on top of the EXE (set = override that team,
    unset = leave the exe alone), keyed on car.teamNr (+0x25). The asm stubs (lammcall.asm) read these
@@ -22,15 +24,16 @@ unsigned long *pCarStdWeight = 0;            /* &d_carstdweight (fallback for un
 extern void MyTeamMass(void);                /* asm: per-team chassis weight at 0x2C510 */
 extern void MyScaleDF(void);                 /* asm: per-team downforce scale at 0x168C7 */
 
-/* Per-team engine performance tables (race power / qual power / reliability). These are plain DATA
-   writes (no code patch): word tables, 2-byte stride, team index 0..13. They live BELOW the
-   savegame block and are never overwritten at runtime, so a one-time startup write persists --
-   no re-apply hook needed (unlike drvdata's names / t_CaridTeamTab). The two power tables store a
-   biased "PS" value (stored = clamp(PS,0,1579) + 0x8031); reliability is raw clamp(0,32767),
-   higher = more fragile. IDA addrs / bias confirmed in docs/driver-data.md. */
-#define TP_PERF_RACE 0x174598UL   /* t_TeamPerfValue  race power  (word table) */
-#define TP_PERF_QUAL 0x1745C0UL   /* word_1745C0      qual power  (word table) */
-#define TP_PERF_REL  0x174728UL   /* t_teamwhat??     reliability (word table) */
+/* Per-team engine performance tables (race power / qual power / reliability): word tables,
+   2-byte stride, team index 0..13. They live BELOW the savegame block and are never overwritten
+   at runtime, so a one-time startup write persists -- no re-apply hook needed. The two power
+   tables store a biased "PS" value (stored = clamp(PS,0,1579) + 0x8031); reliability is raw
+   clamp(0,32767), higher = more fragile.
+   NB: these are DATA addresses, NOT reachable via IDAtoFlat (that maps CODE). All three sit in the
+   region whose base (t_TeamPerfValue 0x174598) GP2Lap resolves into pTeamHPQual; the siblings are
+   fixed byte offsets from it. */
+#define TP_PERF_QUALOFS 0x28UL    /* word_1745C0 - 0x174598 (qual power) */
+#define TP_PERF_RELOFS  0x190UL   /* t_teamwhat  - 0x174598 (reliability) */
 #define TP_PS_BIAS   0x8031       /* "PS" bias added on the two power tables only */
 #define TP_PS_MAX    1579L
 #define TP_REL_MAX   32767L
@@ -47,10 +50,14 @@ static long TpClamp(long v, long lo, long hi, const char *what, int team)
 
 static void TeamPerfApply(void)
 {
-  unsigned char *race = (unsigned char *)IDAtoFlat(TP_PERF_RACE);
-  unsigned char *qual = (unsigned char *)IDAtoFlat(TP_PERF_QUAL);
-  unsigned char *rel  = (unsigned char *)IDAtoFlat(TP_PERF_REL);
+  unsigned char *perf = (unsigned char *)pTeamHPQual;   /* &t_TeamPerfValue (0x174598) */
+  unsigned char *race, *qual, *rel;
   int team, nTeams = 0;
+
+  if (!perf) { LogLine("- TeamPerf: pTeamHPQual unresolved; skipped\n"); return; }
+  race = perf;                    /* 0x174598 */
+  qual = perf + TP_PERF_QUALOFS;  /* 0x1745C0 */
+  rel  = perf + TP_PERF_RELOFS;   /* 0x174728 */
 
   for (team = 1; team <= TP_TEAMS; team++) {
     const OvTeam *t = OverrideTeam(team);

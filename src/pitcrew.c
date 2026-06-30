@@ -13,15 +13,20 @@
    palette index 0..255. The engine re-expands this table into its runtime LUT via
    MakeCrewColors (0x391ED) at session setup -- AFTER this startup write -- and the table
    lives OUTSIDE the savegame block, so a one-time write persists. No expander / re-apply
-   hook needed. See docs/driver-data.md. */
+   hook needed. See docs/driver-data.md.
+   NB: t_PitCrewColors (0x183338) is a DATA address, NOT reachable via IDAtoFlat (that maps
+   CODE). Resolve its runtime pointer from the disp32 baked into the MakeCrewColors source read
+   `mov al, t_PitCrewColors[ecx+ebx]` at IDA 0x39205 (8A 84 19 <disp32>); disp32 is at +3. */
 
 #define PC_TEAMS  14
-#define PC_TABLE  0x183338UL   /* t_PitCrewColors  14 teams x 16 bytes */
+#define PC_TABREF 0x39208UL    /* operand of mov al,t_PitCrewColors[ecx+ebx] (0x39205+3) */
 
 void PitCrewColorsInit(void)
 {
-  unsigned char *base = (unsigned char *)IDAtoFlat(PC_TABLE);
+  unsigned char *base = (unsigned char *)IDACodeReftoDataRef(PC_TABREF);
   int team, i, nTeams = 0;
+
+  if (!base) { LogLine("- PitCrew: t_PitCrewColors unresolved; skipped\n"); return; }
 
   for (team = 1; team <= PC_TEAMS; team++) {
     const OvTeam *t = OverrideTeam(team);

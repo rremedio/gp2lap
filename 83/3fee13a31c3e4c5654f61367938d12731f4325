@@ -1,0 +1,19 @@
+src/gridcap.h
+  s_ff06b7917b0c25::t_e80d0438e6014d 24,26-30,32-36
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.4",
+  "base_commit_sha": "833fee13a31c3e4c5654f61367938d12731f4325",
+  "prompts": {},
+  "sessions": {
+    "s_ff06b7917b0c25": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9c3b397c-8e95-43eb-bfcc-8ed634b4b245",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Roberto Remedio <rremedio@gmail.com>"
+    }
+  }
+}

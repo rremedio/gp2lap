@@ -21,12 +21,18 @@
    min(N,26) keeps stock identical (N>=26 -> 26; zero-loop empties nothing), so
    the patch is a no-op for a full field and only ever SHRINKS the grid. Zeroing
    the grid-table tail turns the would-be phantom slots into empty (carId 0)
-   entries, which the remaining literal-26 loops (InitCarStructs, CopyWhatTable,
-   rSearchLeader) then treat as inert -- see docs / the gridcap.c notes.
+   entries in t_CarStructs.
 
-   All-or-nothing: both sites are verified against their exact stock opcode bytes
-   before EITHER is written; any mismatch disables the whole feature. */
+   Those carId-0 tail cars are then hidden the SAME way non-race sessions hide
+   their inactive cars: per-car flags_90 |= 0x80|0x20 (invisible + out-of-cockpit),
+   the universal "car not present" gate honoured by render/AI/standings/runners/
+   end-of-race. GridCapHideTail() does this each frame from EOFHook (pure data; the
+   position-table pipeline / C9E40 are NOT the field pin and are left untouched).
 
-void GridCapInit(void);   /* read AllowSmallGrid; verify + install when set */
+   All-or-nothing: both finalise sites are verified against their exact stock opcode
+   bytes before EITHER is written; any mismatch disables the whole feature. */
+
+void GridCapInit(void);       /* read AllowSmallGrid; verify + install finalise patches */
+void GridCapHideTail(void);   /* per-frame (EOFHook): retire the carId-0 grid tail */
 
 #endif /* _GRIDCAP_H */

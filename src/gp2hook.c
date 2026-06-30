@@ -1,5 +1,6 @@
 #include "stdinc.h"
 #include "gp2lap.h"
+#include "gridcap.h"
 #include "gp2str.h"
 #include "gp2misc.h"
 #include "gp2glob.h"
@@ -1384,6 +1385,8 @@ void DoSendPacket()
 // End of frame
 void __near EOFHook(void)
 {
+	GridCapHideTail();		/* small-grid: keep the carId-0 grid tail retired/invisible */
+
 	pCurrentCS = NULL;
 	if (ppPlayerCS && *ppPlayerCS)
 		pCurrentCS = *ppPlayerCS;

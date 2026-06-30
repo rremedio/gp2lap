@@ -29,11 +29,25 @@ typedef struct {
   unsigned set;                /* OVG_* bit per key present */
 } OvGeneral;
 
+typedef struct {                 /* one team seat (slot 0/1) */
+  char name[24];   int nameSet;  /* up to 23 chars + NUL */
+  long qual, race; int qualSet, raceSet;  /* skill 0..17016 */
+  long range;      int rangeSet; /* B, 0..32767 */
+  long weight;     int weightSet;/* A, 0..16384 */
+  int  num;        int numSet;   /* carId/number 1..40 */
+  int  selected;   int selectedSet;
+  int  disabled;   int disabledSet;
+} OvDriver;
+
 typedef struct {               /* [Team N], indexed [N-1] */
   char shape[256]; int shapeSet;
   int  nose;       int noseSet;   /* 0/1 */
   long mass;       int massSet;   /* kg (raw) */
   long downforce;  int dfSet;     /* % (raw) */
+  OvDriver drv[2];
+  long power, qualpower; int powerSet, qualpowerSet;  /* PS 0..1579 */
+  long reliability;      int reliabilitySet;          /* 0..32767 */
+  unsigned char pitcrew[14]; int pitcrewSet;          /* 14 ramp bases */
 } OvTeam;
 
 typedef struct {               /* resolved per carId (1..OV_MAXCAR-1) */

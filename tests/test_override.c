@@ -37,6 +37,21 @@ static const char *FILETXT =
   "nose = 1\n"
   "mass = 600\n"
   "downforce = 105\n"
+  "name1 = \"Jean Alesi\"\n"
+  "qual1 = 15980\n"
+  "race1 = 15500\n"
+  "range1 = 1342\n"
+  "weight1 = 16384\n"
+  "num1 = 27\n"
+  "selected1 = 1\n"
+  "disabled2 = 1\n"
+  "power = 765\n"
+  "qualpower = 750\n"
+  "reliability = 2048\n"
+  "pitcrew = 144,146,16,16,146,146,16,146,146,146,146,16,16,16\n"
+  "\n"
+  "[Team 13]   ; over-count pitcrew (15 values) -> rejected\n"
+  "pitcrew = 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15\n"
   "\n"
   "[Team 14]   ; Osella - 1 driver, in slot 2\n"
   "car1 = should_be_ignored.bmp\n"    /* slot 0 empty -> ignored */
@@ -71,6 +86,25 @@ int main(void)
   CHECK(t->noseSet && t->nose == 1);
   CHECK(t->massSet && t->mass == 600);
   CHECK(t->dfSet && t->downforce == 105);
+
+  /* [Team 12] per-seat driver fields (slot 0/1) */
+  CHECK(t->drv[0].nameSet && strcmp(t->drv[0].name, "Jean Alesi") == 0);
+  CHECK(t->drv[0].qualSet && t->drv[0].qual == 15980);
+  CHECK(t->drv[0].raceSet && t->drv[0].race == 15500);
+  CHECK(t->drv[0].rangeSet && t->drv[0].range == 1342);
+  CHECK(t->drv[0].weightSet && t->drv[0].weight == 16384);
+  CHECK(t->drv[0].numSet && t->drv[0].num == 27);
+  CHECK(t->drv[0].selectedSet && t->drv[0].selected == 1);
+  CHECK(t->drv[1].disabledSet && t->drv[1].disabled == 1);
+
+  /* [Team 12] per-team perf / pitcrew */
+  CHECK(t->powerSet && t->power == 765);
+  CHECK(t->qualpowerSet && t->qualpower == 750);
+  CHECK(t->reliabilitySet && t->reliability == 2048);
+  CHECK(t->pitcrewSet && t->pitcrew[0] == 144 && t->pitcrew[13] == 16);
+
+  /* [Team 13] over-count pitcrew (15 values) rejected -> flag stays unset */
+  CHECK(OverrideTeam(13)->pitcrewSet == 0);
 
   /* [Team 12] liveries/cockpit resolved to carIds 27 / 28 */
   c = OverrideCar(27);

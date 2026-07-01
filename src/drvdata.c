@@ -103,7 +103,7 @@ void DriverDataInit(void)
   unsigned char *skill, *rngwt;
   unsigned char  stockTab[40];
   int used[OV_MAXCAR];
-  int team, slot, i, idx, stockCid, cid, applied = 0, anyNum = 0;
+  int team, slot, i, idx, stockCid, cid, applied = 0;
 
   if (!tab || !names || !perf) {
     LogLine("- DriverData: data pointers unresolved; DISABLED\n");
@@ -153,7 +153,6 @@ void DriverDataInit(void)
 
       /* duplicate-number guard (override-vs-override): drop the later, keep the first */
       if (d->numSet) {
-        anyNum = 1;
         if (used[cid]) {
           sprintf(strbuf, "- DriverData: team%02d seat%d num %d duplicates an assigned carId; slot skipped\n",
                   team, slot+1, cid); LogLine(strbuf);
@@ -218,10 +217,6 @@ void DriverDataInit(void)
       }
     }
   }
-
-  if (anyNum)
-    LogLine("- DriverData: NOTE renumbered car(s); the painted on-car number is carset texture art "
-            "and will not change automatically\n");
 
   sprintf(strbuf, "- DriverData: %d drivers patched\n", applied); LogLine(strbuf);
 

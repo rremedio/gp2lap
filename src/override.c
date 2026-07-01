@@ -102,6 +102,14 @@ static void copyval24(char *dst, const char *v)
   dst[23] = 0;
 }
 
+static void copyval13(char *dst, const char *v)   /* team/engine name: 12 chars + NUL */
+{
+  char tmp[256];
+  copyval(tmp, v);
+  strncpy(dst, tmp, 12);
+  dst[12] = 0;
+}
+
 /* resolve a team's driver slot (0/1) to a carId via t_CaridTeamTab; 0 = empty/disabled */
 static int slotCar(const unsigned char *tab, int team1, int slot)
 {
@@ -193,6 +201,8 @@ int OverrideParseFile(const char *path, const unsigned char *tab)
       else if (ieq(key,"power"))       { g_team[team-1].power=strtol(val,0,0); g_team[team-1].powerSet=1; nTeam++; }
       else if (ieq(key,"qualpower"))   { g_team[team-1].qualpower=strtol(val,0,0); g_team[team-1].qualpowerSet=1; nTeam++; }
       else if (ieq(key,"reliability")) { g_team[team-1].reliability=strtol(val,0,0); g_team[team-1].reliabilitySet=1; nTeam++; }
+      else if (ieq(key,"teamname"))    { copyval13(g_team[team-1].teamName, val);   g_team[team-1].teamNameSet=1;   nTeam++; }
+      else if (ieq(key,"enginename"))  { copyval13(g_team[team-1].engineName, val); g_team[team-1].engineNameSet=1; nTeam++; }
       else if (ieq(key,"pitcrew"))     { if(parselist(val,g_team[team-1].pitcrew,14)) { g_team[team-1].pitcrewSet=1; nPit++; }
                                          else { sprintf(strbuf,"- Override: [Team %d] pitcrew needs 14 values; skipped\n",team); LogLine(strbuf); } }
       else { sprintf(strbuf,"- Override: unknown key '%s' in [Team %d]; ignored\n", key, team); LogLine(strbuf); }

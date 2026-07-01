@@ -48,6 +48,8 @@ typedef struct {               /* [Team N], indexed [N-1] */
   long power, qualpower; int powerSet, qualpowerSet;  /* PS 0..1579 */
   long reliability;      int reliabilitySet;          /* 0..32767 */
   unsigned char pitcrew[14]; int pitcrewSet;          /* 14 ramp bases */
+  char teamName[13];   int teamNameSet;   /* constructor name, up to 12 chars + NUL */
+  char engineName[13]; int engineNameSet; /* engine name, up to 12 chars + NUL */
 } OvTeam;
 
 typedef struct {               /* resolved per carId (1..OV_MAXCAR-1) */

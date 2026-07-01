@@ -27,6 +27,16 @@
 
 #define DD_SKILLBIAS 0x3D87     /* 15751: skill rating bias added to clamped skill */
 
+/* Team/constructor + engine name tables. Both 20 entries x 13 bytes (12 chars + NUL),
+   indexed by 0-based team number, and BOTH inside the restored savegame block (above
+   osStartSaveGame 0x1770E0, same side as t_DriverNames) -> RestoreGameState overwrites
+   them, so we reapply after each restore, exactly like driver names. Resolve each base
+   from a `mov eax,offset` operand (like DD_TABREF). */
+#define DD_TEAMNAMEREF 0x7BE4BUL /* mov eax,offset t_TeamNames   -> operand = &t_TeamNames   */
+#define DD_ENGNAMEREF  0x7BE5FUL /* mov eax,offset t_EngineNames -> operand = &t_EngineNames */
+#define DD_NAMESTRIDE  13
+#define DD_NAMEMAX     12
+
 /* the asm wrap on the restore call sites: calls the original RestoreGameState, then reapply */
 extern void MyRestoreGameState(void);
 unsigned long RestoreGameStateAddr = 0;                 /* read by the asm stub (orig RGS flat) */
@@ -93,6 +103,36 @@ static void InstallRestoreHook(void)
   for (i = 0; i < 3; i++)
     *(long *)(p[i] + 1) = (long)((unsigned long)MyRestoreGameState - (unsigned long)(p[i] + 5));
   LogLine("- DriverData: restore-reapply hook armed (3 sites)\n");
+}
+
+/* write a fixed-length NUL-padded name into base[team0*stride] (12 chars max + NUL pad) */
+static void WriteFixedName(unsigned char *base, int team0, const char *s)
+{
+  unsigned char *dst = base + team0 * DD_NAMESTRIDE;
+  int n = (int)strlen(s);
+  if (n > DD_NAMEMAX) n = DD_NAMEMAX;
+  memcpy(dst, s, n);
+  memset(dst + n, 0, DD_NAMESTRIDE - n);
+}
+
+/* Apply the per-team constructor + engine name overrides. Used at init AND from the
+   restore-reapply (both name tables are inside the restored save block). Reads the
+   persisted override model; set = override that team, unset = leave the stock name.
+   Returns the number of names written, or -1 if a table pointer was unresolved. */
+static int ApplyTeamEngineNames(void)
+{
+  unsigned char *tn = (unsigned char *)IDACodeReftoDataRef(DD_TEAMNAMEREF);
+  unsigned char *en = (unsigned char *)IDACodeReftoDataRef(DD_ENGNAMEREF);
+  int team, n = 0;
+
+  if (!tn || !en) return -1;
+  for (team = 1; team <= OV_TEAMS; team++) {
+    const OvTeam *t = OverrideTeam(team);
+    if (!t) continue;
+    if (t->teamNameSet)   { WriteFixedName(tn, team - 1, t->teamName);   n++; }
+    if (t->engineNameSet) { WriteFixedName(en, team - 1, t->engineName); n++; }
+  }
+  return n;
 }
 
 void DriverDataInit(void)
@@ -220,7 +260,17 @@ void DriverDataInit(void)
 
   sprintf(strbuf, "- DriverData: %d drivers patched\n", applied); LogLine(strbuf);
 
-  if (applied) InstallRestoreHook();
+  {
+    int names = ApplyTeamEngineNames();
+    if (names < 0)
+      LogLine("- DriverData: team/engine name tables unresolved; skipped\n");
+    else if (names) {
+      sprintf(strbuf, "- DriverData: %d team/engine name(s) applied\n", names); LogLine(strbuf);
+    }
+    /* the restore hook must run if EITHER driver data or names were applied (both live
+       in the restored savegame block and must be re-written after RestoreGameState) */
+    if (applied || names > 0) InstallRestoreHook();
+  }
 }
 
 /* Re-write ONLY the names + t_CaridTeamTab bytes that RestoreGameState overwrites
@@ -242,4 +292,7 @@ void __near _cdecl DriverDataReapply(void)
     if (r->nameSet && r->idx >= 0)
       memcpy(names + r->idx*24, r->name, 24);
   }
+
+  /* team + engine names live in the same restored block -> re-write them too */
+  ApplyTeamEngineNames();
 }

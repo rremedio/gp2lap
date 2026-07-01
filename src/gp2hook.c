@@ -1385,8 +1385,6 @@ void DoSendPacket()
 // End of frame
 void __near EOFHook(void)
 {
-	GridCapHideTail();		/* small-grid: keep the carId-0 grid tail retired/invisible */
-
 	pCurrentCS = NULL;
 	if (ppPlayerCS && *ppPlayerCS)
 		pCurrentCS = *ppPlayerCS;

@@ -23,16 +23,22 @@
    the grid-table tail turns the would-be phantom slots into empty (carId 0)
    entries in t_CarStructs.
 
-   Those carId-0 tail cars are then hidden the SAME way non-race sessions hide
-   their inactive cars: per-car flags_90 |= 0x80|0x20 (invisible + out-of-cockpit),
-   the universal "car not present" gate honoured by render/AI/standings/runners/
-   end-of-race. GridCapHideTail() does this each frame from EOFHook (pure data; the
-   position-table pipeline / C9E40 are NOT the field pin and are left untouched).
+   Those carId-0 tail cars are then retired the SAME way, at the SAME point, that
+   non-race sessions retire their inactive cars: a placement-loop detour over
+   sub_0_2C785 @0x2C7A1 (the "test b_RaceMode,0FFh / jns L_NoRace" head) runs the
+   engine's own SILENT retire idiom on any RACE car with carId 0 -- rCarRetires plus
+   set field_5E bit1 to suppress the race-only retirement announcer -- BEFORE the
+   session goes live. So the phantoms never render, never classify into the race
+   results, and never trigger an on-screen "<driver> is out of the race" message.
+   (Placement is bounded by a literal 26, so it reaches the tail regardless of the
+   shrunk field.) An earlier per-frame EOFHook flags_90 retire was REPLACED by this:
+   it retired too late (results ghosts) and the un-suppressed flag flips fired the
+   announcer every frame (the "retiring" message storm).
 
-   All-or-nothing: both finalise sites are verified against their exact stock opcode
-   bytes before EITHER is written; any mismatch disables the whole feature. */
+   All-or-nothing: all three sites (two finalise literals + the placement host) are
+   verified against their exact stock opcode bytes before ANY is written; a mismatch
+   disables the whole feature. Installed once at startup -> dynrec-safe. */
 
-void GridCapInit(void);       /* read AllowSmallGrid; verify + install finalise patches */
-void GridCapHideTail(void);   /* per-frame (EOFHook): retire the carId-0 grid tail */
+void GridCapInit(void);       /* read AllowSmallGrid; verify + install the grid patches */
 
 #endif /* _GRIDCAP_H */

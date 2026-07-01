@@ -19,6 +19,8 @@ _TEXT   SEGMENT BYTE PUBLIC USE32 'CODE'
         PUBLIC  MyRestoreGameState_
         PUBLIC  GridCapCopyCount_
         PUBLIC  GridCapFinalize_
+        PUBLIC  GridCapPlace_
+        PUBLIC  GridCapMenuHook_
 
         EXTRN   _GP2_Found              :dword
         EXTRN   _GP2_FoundAdr           :dword
@@ -79,6 +81,16 @@ _TEXT   SEGMENT BYTE PUBLIC USE32 'CODE'
         EXTRN   _pD40EC                 :dword
         EXTRN   _fpDrvDataReapply       :dword
         EXTRN   _RestoreGameStateAddr   :dword
+
+        EXTRN   _GcBRaceModePtr         :dword
+        EXTRN   _GcInitCarESI           :dword
+        EXTRN   _GcRCarRetires          :dword
+        EXTRN   _GcPlaceRejoin          :dword
+        EXTRN   _GcPlaceNoRace          :dword
+        EXTRN   _GcPlaceRace            :dword
+
+        EXTRN   _pCB608Val              :dword    ; &dword_0_4CB608 (results row count)
+        EXTRN   _fpGridCapMenu          :dword    ; C: compact t_CarRaceOrder at menu setup
 
         EXTRN   _pSessionMode           :dword
         EXTRN   _pIsReplay              :dword
@@ -1057,6 +1069,61 @@ gcf_done:
                 pop     eax
                 retn
 GridCapFinalize_ endp
+
+;-------------------------------------------------------------------
+; 2026 --- small-grid placement detour (AllowSmallGrid). Installed by
+; GridCapInit via an E9 jmp over the 9-byte "test b_RaceMode,0FFh /
+; jns L_NoRace" at the top of the car-placement loop sub_0_2C785
+; (IDA 0x2C7A1). Mirrors the engine's own SILENT retire idiom
+; sub_0_2C91D: for a RACE phantom (carId byte [esi+0A6h] == 0) we run
+; InitCarESI + rCarRetires exactly like the non-race L_NoRace path, then
+; set field_5E bit1 to suppress the race-only retirement announcer (which
+; keys on flags_90 0x20 + field_5E bits clear), then rejoin at L_NoRace2.
+; Real cars and ALL non-race cars take their stock branches unchanged, so
+; for a full field (no carId-0 tail) this is a byte-for-byte no-op.
+;   esi = car ptr (LIVE -- preserved across InitCarESI/rCarRetires);
+;   eax/ecx/edx are free here (the race branch + InitCarESI set them).
+GridCapPlace_ proc near
+                push    eax                         ; keep eax intact for the stock branches
+                mov     eax, ds:_GcBRaceModePtr     ; &b_RaceMode (resolved disp32)
+                test    byte ptr [eax], 0FFh
+                pop     eax                         ; (pop preserves flags) -> stock eax restored
+                jns     gcp_norace                  ; non-race -> stock L_NoRace
+                cmp     byte ptr [esi+0A6h], 0      ; race: phantom carId 0?
+                jne     gcp_real                    ; real car -> stock race branch
+                xor     eax, eax                    ; phantom: InitCarESI(0,0,0) ...
+                xor     ecx, ecx
+                xor     edx, edx
+                call    dword ptr ds:_GcInitCarESI  ; 0x2C69A
+                call    dword ptr ds:_GcRCarRetires ; 0x2C495 (flags_90|=0xA0, field_5E|=0x10 ...)
+                or      byte ptr [esi+5Eh], 2       ; field_5E bit1 = announce-suppress
+                jmp     dword ptr ds:_GcPlaceRejoin ; 0x2C7F1 (L_NoRace2: grid spacing + loop continue)
+gcp_norace:
+                jmp     dword ptr ds:_GcPlaceNoRace ; 0x2C7DB (stock L_NoRace)
+gcp_real:
+                jmp     dword ptr ds:_GcPlaceRace   ; 0x2C7AA (stock race branch)
+GridCapPlace_ endp
+
+;-------------------------------------------------------------------
+; 2026 --- small-grid results fix (AllowSmallGrid). Replaces the results
+; row-count write "mov dword_0_4CB608,eax" @0x82A42 (5 bytes A3 08 B6 4C 00)
+; inside sub_0_82A1E (menu setup, runs once post-race AFTER the finish-time
+; sort has relocated the carId-0 phantoms to the front of t_CarRaceOrder and
+; BEFORE the results widget renders). Do the original store, then call the C
+; compactor which drops the carId-0 entries and shifts the real finishers
+; (already in correct time order) to the front. eax = the count (preserved).
+GridCapMenuHook_ proc near
+                push    ebx
+                mov     ebx, ds:_pCB608Val
+                mov     [ebx], eax                  ; original: dword_0_4CB608 = eax
+                pop     ebx
+                pushfd
+                pushad
+                call    dword ptr ds:_fpGridCapMenu
+                popad
+                popfd
+                retn
+GridCapMenuHook_ endp
 
 _TEXT   ENDS
         END

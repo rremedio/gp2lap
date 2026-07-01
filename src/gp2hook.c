@@ -1,5 +1,6 @@
 #include "stdinc.h"
 #include "gp2lap.h"
+#include "gridcap.h"
 #include "gp2str.h"
 #include "gp2misc.h"
 #include "gp2glob.h"

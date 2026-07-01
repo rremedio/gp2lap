@@ -5,6 +5,8 @@
 #include "miscahf.h"        // IDAtoFlat, IDACodeReftoDataRef
 #include "basiclog.h"       // LogLine / strbuf
 #include "override.h"       // shared SeasonOverrides model ([Team N] mass/downforce)
+#include "gp2def.h"         // BYTE/DWORD/... (types used by gp2glob.h)
+#include "gp2glob.h"        // pTeamHPQual (&0x174598 = team perf/skill/reliability base)
 
 /* Per-team mass + downforce. Both are overrides LAYERED on top of the EXE (set = override that team,
    unset = leave the exe alone), keyed on car.teamNr (+0x25). The asm stubs (lammcall.asm) read these
@@ -21,6 +23,67 @@ unsigned long *pCarStdWeight = 0;            /* &d_carstdweight (fallback for un
 
 extern void MyTeamMass(void);                /* asm: per-team chassis weight at 0x2C510 */
 extern void MyScaleDF(void);                 /* asm: per-team downforce scale at 0x168C7 */
+
+/* Per-team engine performance tables (race power / qual power / reliability): word tables,
+   2-byte stride, team index 0..13. They live BELOW the savegame block and are never overwritten
+   at runtime, so a one-time startup write persists -- no re-apply hook needed. The two power
+   tables store a biased "PS" value (stored = clamp(PS,0,1579) + 0x8031); reliability is raw
+   clamp(0,32767), higher = more fragile.
+   NB: these are DATA addresses, NOT reachable via IDAtoFlat (that maps CODE). All three sit in the
+   region whose base (t_TeamPerfValue 0x174598) GP2Lap resolves into pTeamHPQual; the siblings are
+   fixed byte offsets from it. */
+#define TP_PERF_QUALOFS 0x28UL    /* word_1745C0 - 0x174598 (qual power) */
+#define TP_PERF_RELOFS  0x190UL   /* t_teamwhat  - 0x174598 (reliability) */
+#define TP_PS_BIAS   0x8031       /* "PS" bias added on the two power tables only */
+#define TP_PS_MAX    1579L
+#define TP_REL_MAX   32767L
+
+/* clamp v into [lo,hi]; warn (teamphys logging style) when it was out of range */
+static long TpClamp(long v, long lo, long hi, const char *what, int team)
+{
+  if (v < lo) { sprintf(strbuf, "- TeamPerf: team%02d %s %ld < %ld; clamped\n", team, what, v, lo);
+                LogLine(strbuf); return lo; }
+  if (v > hi) { sprintf(strbuf, "- TeamPerf: team%02d %s %ld > %ld; clamped\n", team, what, v, hi);
+                LogLine(strbuf); return hi; }
+  return v;
+}
+
+static void TeamPerfApply(void)
+{
+  unsigned char *perf = (unsigned char *)pTeamHPQual;   /* &t_TeamPerfValue (0x174598) */
+  unsigned char *race, *qual, *rel;
+  int team, nTeams = 0;
+
+  if (!perf) { LogLine("- TeamPerf: pTeamHPQual unresolved; skipped\n"); return; }
+  race = perf;                    /* 0x174598 */
+  qual = perf + TP_PERF_QUALOFS;  /* 0x1745C0 */
+  rel  = perf + TP_PERF_RELOFS;   /* 0x174728 */
+
+  for (team = 1; team <= TP_TEAMS; team++) {
+    const OvTeam *t = OverrideTeam(team);
+    int off = (team - 1) * 2;       /* team index 0..13, 2 bytes per team */
+    int touched = 0;
+    if (!t) continue;
+    if (t->powerSet) {
+      long v = TpClamp(t->power, 0, TP_PS_MAX, "power", team);
+      *(unsigned short *)(race + off) = (unsigned short)(v + TP_PS_BIAS);
+      sprintf(strbuf, "- TeamPerf: team%02d power %ld PS\n", team, v); LogLine(strbuf); touched = 1;
+    }
+    if (t->qualpowerSet) {
+      long v = TpClamp(t->qualpower, 0, TP_PS_MAX, "qualpower", team);
+      *(unsigned short *)(qual + off) = (unsigned short)(v + TP_PS_BIAS);
+      sprintf(strbuf, "- TeamPerf: team%02d qualpower %ld PS\n", team, v); LogLine(strbuf); touched = 1;
+    }
+    if (t->reliabilitySet) {
+      long v = TpClamp(t->reliability, 0, TP_REL_MAX, "reliability", team);
+      *(unsigned short *)(rel + off) = (unsigned short)v;   /* raw, no PS bias */
+      sprintf(strbuf, "- TeamPerf: team%02d reliability %ld\n", team, v); LogLine(strbuf); touched = 1;
+    }
+    if (touched) nTeams++;
+  }
+
+  if (nTeams) { sprintf(strbuf, "- TeamPerf: %d teams patched\n", nTeams); LogLine(strbuf); }
+}
 
 void TeamPhysInit(void)
 {
@@ -44,6 +107,9 @@ void TeamPhysInit(void)
       sprintf(strbuf, "- TeamPhys: team%02d downforce %ld%%\n", i, val); LogLine(strbuf);
     }
   }
+
+  /* engine perf tables: independent DATA writes (run regardless of mass/downforce) */
+  TeamPerfApply();
 
   if (!anyMass && !anyDF) return;
 

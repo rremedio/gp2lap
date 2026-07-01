@@ -20,6 +20,9 @@
 #include "../aiaccel.h"  // 2026: AI low-HP launch fix
 #include "../aibank.h"   // 2026: AI banking roll (cars roll onto banked track)
 #include "../override.h" // 2026: shared SeasonOverrides parser/model (per-team sections)
+#include "../drvdata.h"  // 2026: per-driver data override (names/skill/range/weight/num)
+#include "../pitcrew.h"  // 2026: per-team pit-crew colours
+#include "../gridcap.h"  // 2026: small-grid support (AllowSmallGrid)
 
 unsigned char *GP2_use_svga = NULL;
 unsigned char *GP2_RaceMode = NULL;
@@ -708,6 +711,12 @@ void __near _cdecl AHFAfterGp2Init(void)
   AiLaunchFixInit();
   //--- 2026 --- AI banking roll (drawn cars roll onto banked track sections) ---
   AiBankingInit();
+  //--- 2026 --- per-driver data (name/skill/range/weight/number) + restore-reapply wrap ---
+  DriverDataInit();
+  //--- 2026 --- per-team pit-crew colours (t_PitCrewColors, re-expanded by MakeCrewColors) ---
+  PitCrewColorsInit();
+  //--- 2026 --- small-grid support: clamp the race field to min(N,26) (AllowSmallGrid) ---
+  GridCapInit();
 
 #ifdef TEST
   //--- 10/98 --- dump the Strings ---------

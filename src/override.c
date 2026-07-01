@@ -59,6 +59,57 @@ static int parsetriple(const char *v, unsigned char *out)
   return 1;
 }
 
+/* parse a list of n values (each 0..255, decimal or 0x..). Returns 1 on success. */
+static int parselist(const char *v, unsigned char *out, int n)
+{
+  char *q = (char *)v;
+  long b; int i;
+  for (i = 0; i < n; i++) {
+    while (*q == ' ' || *q == '\t' || *q == '"') q++;
+    b = strtol(q, &q, 0);
+    if (b < 0 || b > 255) return 0;
+    out[i] = (unsigned char)b;
+    while (*q == ' ' || *q == '\t') q++;
+    if (i < n-1) { if (*q != ',') return 0; q++; }
+  }
+  while (*q == ' ' || *q == '\t') q++;
+  if (*q == ',') return 0;            /* reject too many values */
+  return 1;
+}
+
+/* case-insensitive prefix test */
+static int ci_startswith(const char *s, const char *pre)
+{
+  while (*pre) { if (((*s)|0x20) != ((*pre)|0x20)) return 0; s++; pre++; }
+  return 1;
+}
+
+/* match "<base><1|2>" exactly; on hit set *slot to 0/1 and return 1 */
+static int slotKey(const char *key, const char *base, int *slot)
+{
+  int n = (int)strlen(base);
+  if (!ci_startswith(key, base)) return 0;
+  if ((key[n]=='1' || key[n]=='2') && key[n+1]==0) { *slot = key[n]-'1'; return 1; }
+  return 0;
+}
+
+/* copy a value into dst[24], skipping leading quote, stripping trailing junk */
+static void copyval24(char *dst, const char *v)
+{
+  char tmp[256];
+  copyval(tmp, v);
+  strncpy(dst, tmp, 23);
+  dst[23] = 0;
+}
+
+static void copyval13(char *dst, const char *v)   /* team/engine name: 12 chars + NUL */
+{
+  char tmp[256];
+  copyval(tmp, v);
+  strncpy(dst, tmp, 12);
+  dst[12] = 0;
+}
+
 /* resolve a team's driver slot (0/1) to a carId via t_CaridTeamTab; 0 = empty/disabled */
 static int slotCar(const unsigned char *tab, int team1, int slot)
 {
@@ -74,6 +125,7 @@ int OverrideParseFile(const char *path, const unsigned char *tab)
   int section = 0;            /* 0 none, 1 [General], 2 [Team N] */
   int team = 0;
   int nGen=0, nLiv=0, nCk=0, nShape=0, nNose=0, nMass=0, nDf=0;
+  int nDrv=0, nTeam=0, nPit=0;
 
   memset(&g_gen, 0, sizeof(g_gen));
   memset(g_team, 0, sizeof(g_team));
@@ -85,6 +137,7 @@ int OverrideParseFile(const char *path, const unsigned char *tab)
 
   while (fgets(line, sizeof(line), f)) {
     char *p = ltrim(line), *rb, *eq, *key, *ke, *val;
+    int slot;
 
     if (*p==';' || *p=='#' || *p=='\r' || *p=='\n' || *p==0) continue;
 
@@ -137,6 +190,21 @@ int OverrideParseFile(const char *path, const unsigned char *tab)
       else if (ieq(key,"nose"))      { g_team[team-1].nose = (atoi(val)!=0)?1:0; g_team[team-1].noseSet=1; nNose++; }
       else if (ieq(key,"mass"))      { g_team[team-1].mass = strtol(val,0,0);    g_team[team-1].massSet=1; nMass++; }
       else if (ieq(key,"downforce")) { g_team[team-1].downforce = strtol(val,0,0); g_team[team-1].dfSet=1; nDf++; }
+      else if (slotKey(key,"name",&slot))     { copyval24(g_team[team-1].drv[slot].name,val); g_team[team-1].drv[slot].nameSet=1; nDrv++; }
+      else if (slotKey(key,"qual",&slot))     { g_team[team-1].drv[slot].qual=strtol(val,0,0); g_team[team-1].drv[slot].qualSet=1; nDrv++; }
+      else if (slotKey(key,"race",&slot))     { g_team[team-1].drv[slot].race=strtol(val,0,0); g_team[team-1].drv[slot].raceSet=1; nDrv++; }
+      else if (slotKey(key,"range",&slot))    { g_team[team-1].drv[slot].range=strtol(val,0,0); g_team[team-1].drv[slot].rangeSet=1; nDrv++; }
+      else if (slotKey(key,"weight",&slot))   { g_team[team-1].drv[slot].weight=strtol(val,0,0); g_team[team-1].drv[slot].weightSet=1; nDrv++; }
+      else if (slotKey(key,"num",&slot))      { g_team[team-1].drv[slot].num=atoi(val); g_team[team-1].drv[slot].numSet=1; nDrv++; }
+      else if (slotKey(key,"selected",&slot)) { g_team[team-1].drv[slot].selected=(atoi(val)!=0); g_team[team-1].drv[slot].selectedSet=1; nDrv++; }
+      else if (slotKey(key,"disabled",&slot)) { g_team[team-1].drv[slot].disabled=(atoi(val)!=0); g_team[team-1].drv[slot].disabledSet=1; nDrv++; }
+      else if (ieq(key,"power"))       { g_team[team-1].power=strtol(val,0,0); g_team[team-1].powerSet=1; nTeam++; }
+      else if (ieq(key,"qualpower"))   { g_team[team-1].qualpower=strtol(val,0,0); g_team[team-1].qualpowerSet=1; nTeam++; }
+      else if (ieq(key,"reliability")) { g_team[team-1].reliability=strtol(val,0,0); g_team[team-1].reliabilitySet=1; nTeam++; }
+      else if (ieq(key,"teamname"))    { copyval13(g_team[team-1].teamName, val);   g_team[team-1].teamNameSet=1;   nTeam++; }
+      else if (ieq(key,"enginename"))  { copyval13(g_team[team-1].engineName, val); g_team[team-1].engineNameSet=1; nTeam++; }
+      else if (ieq(key,"pitcrew"))     { if(parselist(val,g_team[team-1].pitcrew,14)) { g_team[team-1].pitcrewSet=1; nPit++; }
+                                         else { sprintf(strbuf,"- Override: [Team %d] pitcrew needs 14 values; skipped\n",team); LogLine(strbuf); } }
       else { sprintf(strbuf,"- Override: unknown key '%s' in [Team %d]; ignored\n", key, team); LogLine(strbuf); }
     }
     else {
@@ -145,8 +213,8 @@ int OverrideParseFile(const char *path, const unsigned char *tab)
   }
   fclose(f);
 
-  sprintf(strbuf, "- Override: '%s' loaded - General:%d liveries:%d cockpits:%d shapes:%d noses:%d mass:%d df:%d\n",
-          path, nGen, nLiv, nCk, nShape, nNose, nMass, nDf);
+  sprintf(strbuf, "- Override: '%s' loaded - General:%d liveries:%d cockpits:%d shapes:%d noses:%d mass:%d df:%d driver:%d teamperf:%d pitcrew:%d\n",
+          path, nGen, nLiv, nCk, nShape, nNose, nMass, nDf, nDrv, nTeam, nPit);
   LogLine(strbuf);
   return 0;
 }

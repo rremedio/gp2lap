@@ -22,6 +22,7 @@
 #include "../override.h" // 2026: shared SeasonOverrides parser/model (per-team sections)
 #include "../drvdata.h"  // 2026: per-driver data override (names/skill/range/weight/num)
 #include "../magicd.h"   // 2026: per-track magic-data (.m2d) loading
+#include "../sessions.h" // 2026: [Weekend] enable/disable sessions
 #include "../pitcrew.h"  // 2026: per-team pit-crew colours
 #include "../gridcap.h"  // 2026: small-grid support (AllowSmallGrid)
 
@@ -718,6 +719,9 @@ void __near _cdecl AHFAfterGp2Init(void)
   PitCrewColorsInit();
   //--- 2026 --- small-grid support: clamp the race field to min(N,26) (AllowSmallGrid) ---
   GridCapInit();
+
+  //--- 2026 --- [Weekend] enable/disable sessions (patches the 0xF3 session mask) ---
+  SessionsInit();
 
 #ifdef TEST
   //--- 10/98 --- dump the Strings ---------

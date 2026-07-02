@@ -71,6 +71,11 @@ const OvCar     *OverrideCar(int carId);  /* 1..OV_MAXCAR-1, NULL out of range *
 const OvTrack   *OverrideTrack(int slot1);/* 1..16 (calendar slot), NULL out of range */
 const char      *OverrideBaseDir(void);   /* dir of the loaded override file (with trailing sep), or "" */
 
+/* [Weekend] session enable mask (2a). Starts from stock 0xF3; each per-session key
+   sets/clears its bit (0 Fri-prac,1 Fri-qual,2 Sat-prac,3 Sat-qual,4 warmup,5 race).
+   Returns 1 if a [Weekend] section was present (and writes the mask), else 0. */
+int OverrideWeekend(unsigned char *maskOut);
+
 /* Per-track override file (1b): parse a track's own override into a SEPARATE team model
    (the season model must persist). Only physics keys are honoured (mass/downforce/power/
    qualpower/reliability); other keys are ignored with a warning. Returns the count of

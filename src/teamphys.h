@@ -1,14 +1,17 @@
 #ifndef _TEAMPHYS_H
 #define _TEAMPHYS_H
 
-// 2026: per-team physics, read from the SeasonOverrides override file. Two knobs (no power/skill --
-// GP2Edit owns those; no AI-grip/brakes -- too asymmetric). Keys are per-TEAM (1..14):
-//   massNN                = <kg>   chassis weight; omit = the EXE's d_carstdweight (stock or edited)
-//   downforceMultiplierNN = <pct>  100 = stock, clamped 1..200
-// See docs/gp2lap/runtime-physics-loading.md.
+// 2026: per-team physics from the SeasonOverrides model. Season keys per [Team N] (1..14):
+//   mass=<kg>, downforce=<pct 1..200>, power/qualpower=<PS 0..1579>, reliability=<0..32767>.
+// mass/downforce ride read-site stubs (0 table entry = stock); power/reliability are written
+// into the exe perf tables. 1b adds PER-TRACK layering: each [Track N] can name an Override
+// file whose [Team N] physics values override the season for that track, applied at SOS and
+// reverted (to season, else the stock snapshot) when the track changes.
+// See docs/gp2lap/runtime-physics-loading.md and the season-realism roadmap (in the vault).
 
 extern unsigned long PerTeamPhysics;        // 0 = nothing patched
 
-void TeamPhysInit(void);                     // parse override file + install the two stubs (late init)
+void TeamPhysInit(void);                     // season layer + snapshot + install the stubs (late init)
+void PerTrackPhysSOS(void);                  // SOS: merge the current track's override file, (re)apply
 
 #endif

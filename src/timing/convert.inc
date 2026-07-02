@@ -21,6 +21,7 @@
 #include "../aibank.h"   // 2026: AI banking roll (cars roll onto banked track)
 #include "../override.h" // 2026: shared SeasonOverrides parser/model (per-team sections)
 #include "../drvdata.h"  // 2026: per-driver data override (names/skill/range/weight/num)
+#include "../magicd.h"   // 2026: per-track magic-data (.m2d) loading
 #include "../pitcrew.h"  // 2026: per-team pit-crew colours
 #include "../gridcap.h"  // 2026: small-grid support (AllowSmallGrid)
 
@@ -736,6 +737,10 @@ void __near _cdecl AHFAfterGp2Init(void)
 
   if (*GetCfgULong("CatchTrackInfos"))
     CatchTrackInfos();  // try to catch Names from custom track files
+
+  //--- 2026 --- per-track magic data (.m2d) from the SeasonOverrides [Track N] sections.
+  // AFTER CatchTrackInfos so a per-slot .m2d wins magic table 1 (tyre wear) for its slot.
+  MagicDataInit();
 
   //--- 9/99 --- set fisheye zoom for cokpit mode (default: 256) ----
   tmplongp = GetCfgLong("CockpitZoom");

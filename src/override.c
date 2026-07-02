@@ -213,6 +213,7 @@ int OverrideParseFile(const char *path, const unsigned char *tab)
       else if (ieq(key,"nose"))      { g_team[team-1].nose = (atoi(val)!=0)?1:0; g_team[team-1].noseSet=1; nNose++; }
       else if (ieq(key,"mass"))      { g_team[team-1].mass = strtol(val,0,0);    g_team[team-1].massSet=1; nMass++; }
       else if (ieq(key,"downforce")) { g_team[team-1].downforce = strtol(val,0,0); g_team[team-1].dfSet=1; nDf++; }
+      else if (ieq(key,"downforcerange")) { g_team[team-1].dfRange = strtol(val,0,0); g_team[team-1].dfRangeSet=1; nDf++; }
       else if (slotKey(key,"name",&slot))     { copyval24(g_team[team-1].drv[slot].name,val); g_team[team-1].drv[slot].nameSet=1; nDrv++; }
       else if (slotKey(key,"qual",&slot))     { g_team[team-1].drv[slot].qual=strtol(val,0,0); g_team[team-1].drv[slot].qualSet=1; nDrv++; }
       else if (slotKey(key,"race",&slot))     { g_team[team-1].drv[slot].race=strtol(val,0,0); g_team[team-1].drv[slot].raceSet=1; nDrv++; }
@@ -292,9 +293,10 @@ int OverrideParseTrackFile(const char *path)
 
     if (section == 2) {
       OvTeam *t = &g_ttrack[team-1];
-      if      (ieq(key,"mass"))        { t->mass=strtol(val,0,0);        t->massSet=1;        n++; }
-      else if (ieq(key,"downforce"))   { t->downforce=strtol(val,0,0);   t->dfSet=1;          n++; }
-      else if (ieq(key,"power"))       { t->power=strtol(val,0,0);       t->powerSet=1;       n++; }
+      if      (ieq(key,"mass"))          { t->mass=strtol(val,0,0);        t->massSet=1;        n++; }
+      else if (ieq(key,"downforce"))     { t->downforce=strtol(val,0,0);   t->dfSet=1;          n++; }
+      else if (ieq(key,"downforcerange")){ t->dfRange=strtol(val,0,0);     t->dfRangeSet=1;     n++; }
+      else if (ieq(key,"power"))         { t->power=strtol(val,0,0);       t->powerSet=1;       n++; }
       else if (ieq(key,"qualpower"))   { t->qualpower=strtol(val,0,0);   t->qualpowerSet=1;   n++; }
       else if (ieq(key,"reliability")) { t->reliability=strtol(val,0,0); t->reliabilitySet=1; n++; }
       else { sprintf(strbuf, "- Override: per-track [Team %d] key '%s' not honoured per-track; ignored\n", team, key); LogLine(strbuf); }

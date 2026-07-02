@@ -53,6 +53,19 @@ static long TpClamp(long v, long lo, long hi, const char *what, int team)
 static unsigned short g_stockRace[TP_TEAMS], g_stockQual[TP_TEAMS], g_stockRel[TP_TEAMS];
 static int g_haveSnap = 0;
 
+/* 1c: per-team downforce wobble. A self-contained PRNG (seeded once per launch from the
+   BIOS tick, independent of GP2's RNG) rolls a +/- offset ONCE PER WEEKEND (slot change),
+   so a team's DF "form" is fixed for the weekend but varies each playthrough. */
+static unsigned long g_rng = 0;
+static int g_rollSlot = -1;             /* calendar slot the current wobble was rolled for */
+static int g_dfRoll[TP_TEAMS];          /* per-team signed % offset for this weekend */
+
+static int RngNext(void)                /* 0..0x7FFF */
+{
+  g_rng = g_rng * 1103515245UL + 12345UL;
+  return (int)((g_rng >> 16) & 0x7FFF);
+}
+
 /* Recompute and write the per-team physics from the layered model:
    per-track (when haveTrack, via OverrideTrackTeam) ?? season (OverrideTeam) ?? stock.
    mass/downforce go to the GP2Lap tables the asm stubs read (0 = stock); the perf tables
@@ -76,10 +89,22 @@ static void ApplyMerged(int haveTrack)
     else if (s->massSet)        { long lbs=(s->mass *2205L+500L)/1000L; if(lbs<1)lbs=1; TeamMassLbs[idx]=(unsigned long)lbs; }
     else                        TeamMassLbs[idx] = 0;
 
-    /* downforce -> TeamDFMult (0 = stock via MyScaleDF) */
-    if      (tt && tt->dfSet)   { long v=tt->downforce; if(v<1)v=1; if(v>200)v=200; TeamDFMult[idx]=(unsigned long)v; }
-    else if (s->dfSet)          { long v=s->downforce;  if(v<1)v=1; if(v>200)v=200; TeamDFMult[idx]=(unsigned long)v; }
-    else                        TeamDFMult[idx] = 0;
+    /* downforce -> TeamDFMult (0 = stock via MyScaleDF). Effective multiplier =
+       (per-track ?? season base, else stock) + the per-weekend wobble g_dfRoll (1c). */
+    {
+      int  range = (tt && tt->dfRangeSet) ? (int)tt->dfRange : (s->dfRangeSet ? (int)s->dfRange : 0);
+      long base  = (tt && tt->dfSet)      ? tt->downforce    : (s->dfSet      ? s->downforce     : 0);
+      if (range > 0) {
+        long m = (base > 0 ? base : 100) + g_dfRoll[idx];   /* wobble around the base (or stock 100) */
+        if (m < 1) m = 1; if (m > 200) m = 200;
+        TeamDFMult[idx] = (unsigned long)m;
+      } else if (base > 0) {
+        if (base < 1) base = 1; if (base > 200) base = 200;
+        TeamDFMult[idx] = (unsigned long)base;
+      } else {
+        TeamDFMult[idx] = 0;                                 /* no override -> stock */
+      }
+    }
 
     if (!race || !g_haveSnap) continue;           /* perf tables unavailable */
 
@@ -104,9 +129,14 @@ static void ApplyMerged(int haveTrack)
 void TeamPhysInit(void)
 {
   unsigned char *perf = (unsigned char *)pTeamHPQual;
-  int i, anyMass = 0, anyDF = 0, anyPerTrack = 0, applied = 0;
+  int i, anyMass = 0, anyDF = 0, anyRange = 0, anyPerTrack = 0, applied = 0;
 
-  for (i = 0; i < TP_TEAMS; i++) { TeamMassLbs[i] = 0; TeamDFMult[i] = 0; }
+  for (i = 0; i < TP_TEAMS; i++) { TeamMassLbs[i] = 0; TeamDFMult[i] = 0; g_dfRoll[i] = 0; }
+
+  /* seed the DF-wobble PRNG once per launch from the BIOS tick (0000:046C), so the wobble
+     varies each playthrough; fall back to a constant if that read yields 0. */
+  g_rng = *(volatile unsigned long *)0x46CUL;
+  if (!g_rng) g_rng = 0x13579BDFUL;
 
   /* snapshot stock perf BEFORE any override write (needed to revert an unset team) */
   if (perf) {
@@ -120,7 +150,7 @@ void TeamPhysInit(void)
   } else LogLine("- TeamPerf: pTeamHPQual unresolved; perf skipped\n");
 
   /* what does the season layer set, and are there any per-track override files? */
-  for (i = 1; i <= TP_TEAMS; i++)  { const OvTeam  *t  = OverrideTeam(i);  if (t->massSet) anyMass=1; if (t->dfSet) anyDF=1; }
+  for (i = 1; i <= TP_TEAMS; i++)  { const OvTeam  *t  = OverrideTeam(i);  if (t->massSet) anyMass=1; if (t->dfSet) anyDF=1; if (t->dfRangeSet) anyRange=1; }
   for (i = 1; i <= OV_TRACKS; i++) { const OvTrack *tr = OverrideTrack(i); if (tr && tr->overrideFileSet) anyPerTrack=1; }
 
   ApplyMerged(0);   /* apply the season layer (mass/DF tables + perf tables) */
@@ -145,7 +175,7 @@ void TeamPhysInit(void)
      (66 89 46 4E) inside CalcWings? -- right after +0x170 (the front/rear split) is set, so scaling
      +0x16C here keeps balance. Replace the 10 bytes with `call MyScaleDF` + NOPs; the stub scales
      +0x16C by the team %, copies to +0x4E, and skips invalid teamNr (incl. the accel-table dummy). */
-  if (anyDF || anyPerTrack) {
+  if (anyDF || anyRange || anyPerTrack) {
     unsigned char *p = (unsigned char *)IDAtoFlat(0x168C7);
     if (p[0]==0x8B && p[1]==0x86 && p[2]==0x6C && p[3]==0x01 &&
         p[6]==0x66 && p[7]==0x89 && p[8]==0x46 && p[9]==0x4E) {
@@ -177,6 +207,24 @@ void PerTrackPhysSOS(void)
     else               strcpy(path, tr->overrideFile);
     if (OverrideParseTrackFile(path) >= 0) haveTrack = 1;
   }
+
+  /* 1c: re-roll each team's DF wobble once per weekend (when the calendar slot changes).
+     Range = per-track ?? season; offset = uniform[-range, +range] % points. */
+  if (slot != g_rollSlot) {
+    int team, any = 0;
+    char *w = strbuf;
+    w += sprintf(w, "- TeamPhys: DF wobble (slot %d):", slot);
+    for (team = 1; team <= TP_TEAMS; team++) {
+      const OvTeam *s  = OverrideTeam(team);
+      const OvTeam *tt = haveTrack ? OverrideTrackTeam(team) : 0;
+      int range = (tt && tt->dfRangeSet) ? (int)tt->dfRange : (s->dfRangeSet ? (int)s->dfRange : 0);
+      g_dfRoll[team-1] = (range > 0) ? (RngNext() % (2*range + 1)) - range : 0;
+      if (range > 0) { w += sprintf(w, " t%02d %+d", team, g_dfRoll[team-1]); any = 1; }
+    }
+    if (any) { sprintf(w, "\n"); LogLine(strbuf); }
+    g_rollSlot = slot;
+  }
+
   ApplyMerged(haveTrack);
   if (haveTrack) { sprintf(strbuf, "- TeamPhys: per-track overrides applied (slot %d)\n", slot); LogLine(strbuf); }
 }

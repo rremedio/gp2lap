@@ -45,6 +45,7 @@ typedef struct {               /* [Team N], indexed [N-1] */
   int  nose;       int noseSet;   /* 0/1 */
   long mass;       int massSet;   /* kg (raw) */
   long downforce;  int dfSet;     /* % (raw) */
+  long dfRange;    int dfRangeSet;/* +/- % random wobble on the DF multiplier, per weekend (1c) */
   OvDriver drv[2];
   long power, qualpower; int powerSet, qualpowerSet;  /* PS 0..1579 */
   long reliability;      int reliabilitySet;          /* 0..32767 */

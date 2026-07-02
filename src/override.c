@@ -17,6 +17,8 @@ static OvTeam    g_ttrack[OV_TEAMS];        /* per-track team model (filled by O
 static char      g_ovdir[256];              /* dir of the override file (with trailing sep), or "" */
 static unsigned char g_weekendMask = 0xF3;  /* [Weekend] session mask (from stock 0xF3) */
 static int       g_weekendSet = 0;          /* 1 if a [Weekend] section was present */
+static int       g_sprintOn = 0;            /* [Weekend] Sprint = 1 */
+static int       g_sprintLaps = 0;          /* [Weekend] SprintLaps */
 
 const OvGeneral *OverrideGeneral(void)      { return &g_gen; }
 const OvTeam    *OverrideTeam(int t)        { return (t >= 1 && t <= OV_TEAMS)  ? &g_team[t-1]   : 0; }
@@ -25,6 +27,7 @@ const OvTrack   *OverrideTrack(int t)       { return (t >= 1 && t <= OV_TRACKS) 
 const OvTeam    *OverrideTrackTeam(int t)   { return (t >= 1 && t <= OV_TEAMS)  ? &g_ttrack[t-1] : 0; }
 const char      *OverrideBaseDir(void)      { return g_ovdir; }
 int OverrideWeekend(unsigned char *maskOut) { if (maskOut) *maskOut = g_weekendMask; return g_weekendSet; }
+int OverrideSprint(int *lapsOut)            { if (lapsOut) *lapsOut = g_sprintLaps; return g_sprintOn; }
 
 /* ---------------- small text helpers ---------------- */
 
@@ -141,6 +144,7 @@ int OverrideParseFile(const char *path, const unsigned char *tab)
   memset(g_car,   0, sizeof(g_car));
   memset(g_track, 0, sizeof(g_track));
   g_weekendMask = 0xF3; g_weekendSet = 0;
+  g_sprintOn = 0; g_sprintLaps = 0;
 
   if (!path || !path[0]) return -1;
 
@@ -264,7 +268,10 @@ int OverrideParseFile(const char *path, const unsigned char *tab)
         if (atoi(val) != 0) g_weekendMask |=  (unsigned char)(1 << bit);
         else                g_weekendMask &= (unsigned char)~(1 << bit);
         nWeekend++;
-      } else { sprintf(strbuf,"- Override: unknown key '%s' in [Weekend]; ignored\n", key); LogLine(strbuf); }
+      }
+      else if (ieq(key,"sprint"))     { g_sprintOn = (atoi(val) != 0); nWeekend++; }
+      else if (ieq(key,"sprintlaps")) { g_sprintLaps = atoi(val); nWeekend++; }
+      else { sprintf(strbuf,"- Override: unknown key '%s' in [Weekend]; ignored\n", key); LogLine(strbuf); }
     }
     else {
       sprintf(strbuf,"- Override: key '%s' before any section; ignored\n", key); LogLine(strbuf);

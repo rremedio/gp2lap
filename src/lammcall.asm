@@ -21,6 +21,7 @@ _TEXT   SEGMENT BYTE PUBLIC USE32 'CODE'
         PUBLIC  GridCapFinalize_
         PUBLIC  GridCapPlace_
         PUBLIC  GridCapMenuHook_
+        PUBLIC  SprintCave_
 
         EXTRN   _GP2_Found              :dword
         EXTRN   _GP2_FoundAdr           :dword
@@ -91,6 +92,25 @@ _TEXT   SEGMENT BYTE PUBLIC USE32 'CODE'
 
         EXTRN   _pCB608Val              :dword    ; &dword_0_4CB608 (results row count)
         EXTRN   _fpGridCapMenu          :dword    ; C: compact t_CarRaceOrder at menu setup
+
+        ; --- 2026 (2b) sprint cave: resolved GP2 fn/data/jump addresses (SessionsInit fills) ---
+        EXTRN   _Sp_GridA               :dword    ; sub_0_2C039
+        EXTRN   _Sp_GridB               :dword    ; sub_0_2C12D
+        EXTRN   _Sp_InitStart           :dword    ; InitStartOrder 0x2C25F
+        EXTRN   _Sp_GridFin             :dword    ; sub_0_2C19D grid-finalise
+        EXTRN   _Sp_RaceMain            :dword    ; RaceMainFunc 0x6A352
+        EXTRN   _Sp_Cleanup             :dword    ; sub_0_6A6B0
+        EXTRN   _Sp_LapDerive           :dword    ; sub_0_1710F (re-derive full laps)
+        EXTRN   _Sp_pGridReady          :dword    ; &byte_0_179648
+        EXTRN   _Sp_pLaps               :dword    ; &w_LapsInThisRace (0x179638)
+        EXTRN   _Sp_pLapBound           :dword    ; &dword_0_17963A
+        EXTRN   _Sp_pTimeCap            :dword    ; &word_0_179642
+        EXTRN   _Sp_pRaceMode           :dword    ; &b_RaceMode (0x17964A)
+        EXTRN   _Sp_pMask               :dword    ; &byte_0_179646
+        EXTRN   _Sp_pAbort              :dword    ; &byte_0_174E4E
+        EXTRN   _Sp_jLoop               :dword    ; loc_0_6A793 (offer next session)
+        EXTRN   _Sp_jExit               :dword    ; loc_0_6AE10 (abort -> exit weekend)
+        EXTRN   _Sp_Laps                :dword    ; sprint lap count (value)
 
         EXTRN   _pSessionMode           :dword
         EXTRN   _pIsReplay              :dword
@@ -1124,6 +1144,45 @@ GridCapMenuHook_ proc near
                 popfd
                 retn
 GridCapMenuHook_ endp
+
+;-------------------------------------------------------------------
+; 2026 (2b) --- SPRINT cave. Installed by SessionsInit into the warmup dispatch
+; slot t_FuncTab6A7C9[4] (@0x6A7D9) when [Weekend] Sprint=1. Entered by the weekend
+; loop's `jmp cs:[eax]` (a tail-call), so it must NOT retn -- it jmps back to the loop
+; (0x6A793) to offer the next session (the feature race), exactly like the stock warmup
+; handler. Mirrors the race handler's grid-build + timing + race, sets a SHORT lap count,
+; and -- crucially -- does NOT write the 0xC0 weekend-end mask; instead it clears only the
+; warmup bit (and 0EFh), leaving the race bit set so the feature race still runs. All GP2
+; addresses come from resolved globals (SessionsInit). eax/ecx = scratch (the loop re-reads
+; its own state). The feature race re-derives its full lap count via its own weekend-init.
+SprintCave_     proc    near
+                mov     eax, ds:_Sp_pGridReady      ; byte_0_179648 = 80h (grid ready)
+                mov     byte ptr [eax], 80h
+                call    dword ptr ds:_Sp_GridA      ; build the grid (from the qualified order)
+                call    dword ptr ds:_Sp_GridB
+                call    dword ptr ds:_Sp_InitStart
+                mov     eax, ds:_Sp_pLaps           ; w_LapsInThisRace = sprint laps (word)
+                mov     ecx, ds:_Sp_Laps
+                mov     word ptr [eax], cx
+                mov     eax, ds:_Sp_pLapBound       ; dword_0_17963A = 10000 (lap bound off)
+                mov     dword ptr [eax], 10000
+                mov     eax, ds:_Sp_pTimeCap        ; word_0_179642 = 120 min time cap
+                mov     word ptr [eax], 120
+                mov     eax, ds:_Sp_pRaceMode       ; b_RaceMode = 80h (RACE)
+                mov     byte ptr [eax], 80h
+                call    dword ptr ds:_Sp_GridFin    ; sub_0_2C19D grid-finalise
+                call    dword ptr ds:_Sp_RaceMain   ; RaceMainFunc -- run the sprint
+                call    dword ptr ds:_Sp_Cleanup    ; sub_0_6A6B0 post-race cleanup
+                call    dword ptr ds:_Sp_LapDerive  ; sub_0_1710F -- restore full laps for the feature race
+                mov     eax, ds:_Sp_pMask           ; consume ONLY the warmup bit, keep race+controls
+                and     byte ptr [eax], 0EFh
+                mov     eax, ds:_Sp_pAbort          ; byte_0_174E4E: aborted?
+                cmp     byte ptr [eax], 0FFh
+                jz      sc_exit
+                jmp     dword ptr ds:_Sp_jLoop      ; 0x6A793 -- re-offer the next session
+sc_exit:
+                jmp     dword ptr ds:_Sp_jExit      ; 0x6AE10 -- abort -> exit weekend
+SprintCave_     endp
 
 _TEXT   ENDS
         END

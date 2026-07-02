@@ -76,6 +76,10 @@ const char      *OverrideBaseDir(void);   /* dir of the loaded override file (wi
    Returns 1 if a [Weekend] section was present (and writes the mask), else 0. */
 int OverrideWeekend(unsigned char *maskOut);
 
+/* [Weekend] sprint (2b): Sprint=1 turns the warmup slot into a 2nd (shorter) race of
+   SprintLaps laps. Returns 1 if Sprint is on (and writes the lap count), else 0. */
+int OverrideSprint(int *lapsOut);
+
 /* Per-track override file (1b): parse a track's own override into a SEPARATE team model
    (the season model must persist). Only physics keys are honoured (mass/downforce/power/
    qualpower/reliability); other keys are ignored with a warning. Returns the count of

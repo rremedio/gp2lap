@@ -12,10 +12,14 @@
 static OvGeneral g_gen;
 static OvTeam    g_team[OV_TEAMS];
 static OvCar     g_car[OV_MAXCAR];
+static OvTrack   g_track[OV_TRACKS];
+static char      g_ovdir[256];              /* dir of the override file (with trailing sep), or "" */
 
 const OvGeneral *OverrideGeneral(void)      { return &g_gen; }
-const OvTeam    *OverrideTeam(int t)        { return (t >= 1 && t <= OV_TEAMS) ? &g_team[t-1] : 0; }
-const OvCar     *OverrideCar(int c)         { return (c >= 1 && c <  OV_MAXCAR) ? &g_car[c]   : 0; }
+const OvTeam    *OverrideTeam(int t)        { return (t >= 1 && t <= OV_TEAMS)  ? &g_team[t-1]  : 0; }
+const OvCar     *OverrideCar(int c)         { return (c >= 1 && c <  OV_MAXCAR) ? &g_car[c]     : 0; }
+const OvTrack   *OverrideTrack(int t)       { return (t >= 1 && t <= OV_TRACKS) ? &g_track[t-1] : 0; }
+const char      *OverrideBaseDir(void)      { return g_ovdir; }
 
 /* ---------------- small text helpers ---------------- */
 
@@ -122,16 +126,26 @@ int OverrideParseFile(const char *path, const unsigned char *tab)
 {
   FILE *f;
   char line[300];
-  int section = 0;            /* 0 none, 1 [General], 2 [Team N] */
-  int team = 0;
+  int section = 0;            /* 0 none, 1 [General], 2 [Team N], 3 [Track N] */
+  int team = 0, trk = 0;
   int nGen=0, nLiv=0, nCk=0, nShape=0, nNose=0, nMass=0, nDf=0;
-  int nDrv=0, nTeam=0, nPit=0;
+  int nDrv=0, nTeam=0, nPit=0, nTrack=0;
 
-  memset(&g_gen, 0, sizeof(g_gen));
-  memset(g_team, 0, sizeof(g_team));
-  memset(g_car,  0, sizeof(g_car));
+  memset(&g_gen,  0, sizeof(g_gen));
+  memset(g_team,  0, sizeof(g_team));
+  memset(g_car,   0, sizeof(g_car));
+  memset(g_track, 0, sizeof(g_track));
 
   if (!path || !path[0]) return -1;
+
+  /* remember the override file's directory (with trailing separator) so per-track
+     files referenced from it (e.g. MagicData=magic/spa.m2d) resolve relative to it */
+  g_ovdir[0] = 0;
+  { int i, cut = -1;
+    for (i = 0; path[i] && i < (int)sizeof(g_ovdir)-1; i++)
+      if (path[i]=='/' || path[i]=='\\') cut = i;
+    if (cut >= 0) { memcpy(g_ovdir, path, cut+1); g_ovdir[cut+1] = 0; }
+  }
   f = fopen(path, "rb");
   if (!f) { sprintf(strbuf, "- Override: '%s' not found; disabled\n", path); LogLine(strbuf); return -1; }
 
@@ -153,6 +167,13 @@ int OverrideParseFile(const char *path, const unsigned char *tab)
         if (team >= 1 && team <= OV_TEAMS) { section = 2; }
         else { section = 0;
                sprintf(strbuf, "- Override: [%s] team out of range; skipped\n", p); LogLine(strbuf); }
+      }
+      else if ((p[0]|0x20)=='t' && (p[1]|0x20)=='r' && (p[2]|0x20)=='a' && (p[3]|0x20)=='c' && (p[4]|0x20)=='k') {
+        char *q = ltrim(p + 5);
+        trk = atoi(q);
+        if (trk >= 1 && trk <= OV_TRACKS) { section = 3; }
+        else { section = 0;
+               sprintf(strbuf, "- Override: [%s] track out of range; skipped\n", p); LogLine(strbuf); }
       } else { section = 0;
                sprintf(strbuf, "- Override: unknown section [%s]; ignored\n", p); LogLine(strbuf); }
       continue;
@@ -207,14 +228,23 @@ int OverrideParseFile(const char *path, const unsigned char *tab)
                                          else { sprintf(strbuf,"- Override: [Team %d] pitcrew needs 14 values; skipped\n",team); LogLine(strbuf); } }
       else { sprintf(strbuf,"- Override: unknown key '%s' in [Team %d]; ignored\n", key, team); LogLine(strbuf); }
     }
+    else if (section == 3) {                      /* ---- [Track N] ---- */
+      if (ieq(key,"magicdata")) {
+        char tmp[256]; copyval(tmp, val);
+        strncpy(g_track[trk-1].magicData, tmp, sizeof(g_track[trk-1].magicData)-1);
+        g_track[trk-1].magicData[sizeof(g_track[trk-1].magicData)-1] = 0;
+        g_track[trk-1].magicDataSet = 1; nTrack++;
+      }
+      else { sprintf(strbuf,"- Override: unknown key '%s' in [Track %d]; ignored\n", key, trk); LogLine(strbuf); }
+    }
     else {
       sprintf(strbuf,"- Override: key '%s' before any section; ignored\n", key); LogLine(strbuf);
     }
   }
   fclose(f);
 
-  sprintf(strbuf, "- Override: '%s' loaded - General:%d liveries:%d cockpits:%d shapes:%d noses:%d mass:%d df:%d driver:%d teamperf:%d pitcrew:%d\n",
-          path, nGen, nLiv, nCk, nShape, nNose, nMass, nDf, nDrv, nTeam, nPit);
+  sprintf(strbuf, "- Override: '%s' loaded - General:%d liveries:%d cockpits:%d shapes:%d noses:%d mass:%d df:%d driver:%d teamperf:%d pitcrew:%d track:%d\n",
+          path, nGen, nLiv, nCk, nShape, nNose, nMass, nDf, nDrv, nTeam, nPit, nTrack);
   LogLine(strbuf);
   return 0;
 }

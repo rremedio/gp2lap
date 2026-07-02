@@ -10,6 +10,7 @@
 
 #define OV_TEAMS   14
 #define OV_MAXCAR  64          /* carId masked to 0x3F (matches cartex CT_MAXCAR) */
+#define OV_TRACKS  16          /* calendar slots (magic data is per track slot 0..15) */
 
 /* [General] "set" bits */
 #define OVG_REFUELSPEED   (1u<<0)
@@ -57,10 +58,16 @@ typedef struct {               /* resolved per carId (1..OV_MAXCAR-1) */
   unsigned char cp[3]; int cpSet;
 } OvCar;
 
+typedef struct {               /* [Track N], indexed [N-1]; N = calendar slot 1..16 */
+  char magicData[128]; int magicDataSet;   /* .m2d filename, relative to the override file */
+} OvTrack;
+
 void OverrideLoad(void);                  /* GP2Lap: resolve t_CaridTeamTab + parse the cfg file */
 const OvGeneral *OverrideGeneral(void);
 const OvTeam    *OverrideTeam(int team1); /* 1..14, NULL out of range */
 const OvCar     *OverrideCar(int carId);  /* 1..OV_MAXCAR-1, NULL out of range */
+const OvTrack   *OverrideTrack(int slot1);/* 1..16 (calendar slot), NULL out of range */
+const char      *OverrideBaseDir(void);   /* dir of the loaded override file (with trailing sep), or "" */
 
 /* pure / host-testable: parse 'path', resolve car slots via caridTeamTab (>= OV_TEAMS*2 bytes).
    Returns 0 on success, -1 if the file is missing/unset. */

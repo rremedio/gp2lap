@@ -326,6 +326,7 @@ void __near _cdecl AHFCrossingSplit( unsigned long section,
 void __near _cdecl AHFSOSHook(void)
 {
   AHFFillCompounds();   /* per-car tyre compounds: bSessionMode is current at SOS */
+  PerTrackPhysSOS();    /* 2026 (1b): apply the current track's per-track physics override */
   InitMyTiming();
 }
 

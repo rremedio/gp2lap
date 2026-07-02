@@ -48,76 +48,89 @@ static long TpClamp(long v, long lo, long hi, const char *what, int team)
   return v;
 }
 
-static void TeamPerfApply(void)
-{
-  unsigned char *perf = (unsigned char *)pTeamHPQual;   /* &t_TeamPerfValue (0x174598) */
-  unsigned char *race, *qual, *rel;
-  int team, nTeams = 0;
+/* stock snapshot of the three perf tables, taken once at init BEFORE any override write,
+   so an unset team can be reverted to stock when per-track overrides change track to track. */
+static unsigned short g_stockRace[TP_TEAMS], g_stockQual[TP_TEAMS], g_stockRel[TP_TEAMS];
+static int g_haveSnap = 0;
 
-  if (!perf) { LogLine("- TeamPerf: pTeamHPQual unresolved; skipped\n"); return; }
-  race = perf;                    /* 0x174598 */
-  qual = perf + TP_PERF_QUALOFS;  /* 0x1745C0 */
-  rel  = perf + TP_PERF_RELOFS;   /* 0x174728 */
+/* Recompute and write the per-team physics from the layered model:
+   per-track (when haveTrack, via OverrideTrackTeam) ?? season (OverrideTeam) ?? stock.
+   mass/downforce go to the GP2Lap tables the asm stubs read (0 = stock); the perf tables
+   are written directly, reverting an unset team to its stock snapshot. Called at init
+   (haveTrack=0) and each SOS. Quiet -- TpClamp still warns on an out-of-range value. */
+static void ApplyMerged(int haveTrack)
+{
+  unsigned char *perf = (unsigned char *)pTeamHPQual;
+  unsigned char *race = 0, *qual = 0, *rel = 0;
+  int team;
+
+  if (perf) { race = perf; qual = perf + TP_PERF_QUALOFS; rel = perf + TP_PERF_RELOFS; }
 
   for (team = 1; team <= TP_TEAMS; team++) {
-    const OvTeam *t = OverrideTeam(team);
-    int off = (team - 1) * 2;       /* team index 0..13, 2 bytes per team */
-    int touched = 0;
-    if (!t) continue;
-    if (t->powerSet) {
-      long v = TpClamp(t->power, 0, TP_PS_MAX, "power", team);
-      *(unsigned short *)(race + off) = (unsigned short)(v + TP_PS_BIAS);
-      sprintf(strbuf, "- TeamPerf: team%02d power %ld PS\n", team, v); LogLine(strbuf); touched = 1;
-    }
-    if (t->qualpowerSet) {
-      long v = TpClamp(t->qualpower, 0, TP_PS_MAX, "qualpower", team);
-      *(unsigned short *)(qual + off) = (unsigned short)(v + TP_PS_BIAS);
-      sprintf(strbuf, "- TeamPerf: team%02d qualpower %ld PS\n", team, v); LogLine(strbuf); touched = 1;
-    }
-    if (t->reliabilitySet) {
-      long v = TpClamp(t->reliability, 0, TP_REL_MAX, "reliability", team);
-      *(unsigned short *)(rel + off) = (unsigned short)v;   /* raw, no PS bias */
-      sprintf(strbuf, "- TeamPerf: team%02d reliability %ld\n", team, v); LogLine(strbuf); touched = 1;
-    }
-    if (touched) nTeams++;
-  }
+    const OvTeam *s  = OverrideTeam(team);
+    const OvTeam *tt = haveTrack ? OverrideTrackTeam(team) : 0;
+    int idx = team - 1, off = idx * 2;
 
-  if (nTeams) { sprintf(strbuf, "- TeamPerf: %d teams patched\n", nTeams); LogLine(strbuf); }
+    /* mass -> TeamMassLbs (0 = stock via MyTeamMass) */
+    if      (tt && tt->massSet) { long lbs=(tt->mass*2205L+500L)/1000L; if(lbs<1)lbs=1; TeamMassLbs[idx]=(unsigned long)lbs; }
+    else if (s->massSet)        { long lbs=(s->mass *2205L+500L)/1000L; if(lbs<1)lbs=1; TeamMassLbs[idx]=(unsigned long)lbs; }
+    else                        TeamMassLbs[idx] = 0;
+
+    /* downforce -> TeamDFMult (0 = stock via MyScaleDF) */
+    if      (tt && tt->dfSet)   { long v=tt->downforce; if(v<1)v=1; if(v>200)v=200; TeamDFMult[idx]=(unsigned long)v; }
+    else if (s->dfSet)          { long v=s->downforce;  if(v<1)v=1; if(v>200)v=200; TeamDFMult[idx]=(unsigned long)v; }
+    else                        TeamDFMult[idx] = 0;
+
+    if (!race || !g_haveSnap) continue;           /* perf tables unavailable */
+
+    /* power / qualpower / reliability -> perf tables (unset -> stock snapshot).
+       NB reliability is rolled at session init (CalcCarDamage); if that runs before this
+       SOS apply, a per-track reliability change lands the FOLLOWING session. power/mass/DF
+       are read later in the session, so they take effect immediately. */
+    if      (tt && tt->powerSet) *(unsigned short*)(race+off) = (unsigned short)(TpClamp(tt->power,0,TP_PS_MAX,"power",team)+TP_PS_BIAS);
+    else if (s->powerSet)        *(unsigned short*)(race+off) = (unsigned short)(TpClamp(s->power, 0,TP_PS_MAX,"power",team)+TP_PS_BIAS);
+    else                         *(unsigned short*)(race+off) = g_stockRace[idx];
+
+    if      (tt && tt->qualpowerSet) *(unsigned short*)(qual+off) = (unsigned short)(TpClamp(tt->qualpower,0,TP_PS_MAX,"qualpower",team)+TP_PS_BIAS);
+    else if (s->qualpowerSet)        *(unsigned short*)(qual+off) = (unsigned short)(TpClamp(s->qualpower, 0,TP_PS_MAX,"qualpower",team)+TP_PS_BIAS);
+    else                             *(unsigned short*)(qual+off) = g_stockQual[idx];
+
+    if      (tt && tt->reliabilitySet) *(unsigned short*)(rel+off) = (unsigned short)TpClamp(tt->reliability,0,TP_REL_MAX,"reliability",team);
+    else if (s->reliabilitySet)        *(unsigned short*)(rel+off) = (unsigned short)TpClamp(s->reliability, 0,TP_REL_MAX,"reliability",team);
+    else                               *(unsigned short*)(rel+off) = g_stockRel[idx];
+  }
 }
 
 void TeamPhysInit(void)
 {
-  int i, anyMass = 0, anyDF = 0, applied = 0;
+  unsigned char *perf = (unsigned char *)pTeamHPQual;
+  int i, anyMass = 0, anyDF = 0, anyPerTrack = 0, applied = 0;
 
   for (i = 0; i < TP_TEAMS; i++) { TeamMassLbs[i] = 0; TeamDFMult[i] = 0; }
 
-  for (i = 1; i <= TP_TEAMS; i++) {
-    const OvTeam *t = OverrideTeam(i);
-    if (t->massSet) {
-      long val = t->mass;
-      long lbs = (val * 2205L + 500L) / 1000L;        /* kg -> lbs (x2.205) */
-      if (lbs < 1) lbs = 1;                           /* keep non-zero = "set" */
-      TeamMassLbs[i-1] = (unsigned long)lbs; anyMass = 1;
-      sprintf(strbuf, "- TeamPhys: team%02d mass %ld kg (%ld lb)\n", i, val, lbs); LogLine(strbuf);
+  /* snapshot stock perf BEFORE any override write (needed to revert an unset team) */
+  if (perf) {
+    unsigned char *race = perf, *qual = perf + TP_PERF_QUALOFS, *rel = perf + TP_PERF_RELOFS;
+    for (i = 0; i < TP_TEAMS; i++) {
+      g_stockRace[i] = *(unsigned short *)(race + i*2);
+      g_stockQual[i] = *(unsigned short *)(qual + i*2);
+      g_stockRel[i]  = *(unsigned short *)(rel  + i*2);
     }
-    if (t->dfSet) {
-      long val = t->downforce;
-      if (val < 1) val = 1; if (val > 200) val = 200;
-      TeamDFMult[i-1] = (unsigned long)val; anyDF = 1;
-      sprintf(strbuf, "- TeamPhys: team%02d downforce %ld%%\n", i, val); LogLine(strbuf);
-    }
-  }
+    g_haveSnap = 1;
+  } else LogLine("- TeamPerf: pTeamHPQual unresolved; perf skipped\n");
 
-  /* engine perf tables: independent DATA writes (run regardless of mass/downforce) */
-  TeamPerfApply();
+  /* what does the season layer set, and are there any per-track override files? */
+  for (i = 1; i <= TP_TEAMS; i++)  { const OvTeam  *t  = OverrideTeam(i);  if (t->massSet) anyMass=1; if (t->dfSet) anyDF=1; }
+  for (i = 1; i <= OV_TRACKS; i++) { const OvTrack *tr = OverrideTrack(i); if (tr && tr->overrideFileSet) anyPerTrack=1; }
 
-  if (!anyMass && !anyDF) return;
+  ApplyMerged(0);   /* apply the season layer (mass/DF tables + perf tables) */
 
   /* MASS: 0x2C510 `add eax, d_carstdweight` (03 05 <abs32>) in FLoadToCarWght.
      Bootstrap &d_carstdweight from the operand FIRST (it lives in the bytes we overwrite), then
      replace with `call MyTeamMass` + NOP. The stub adds the per-team weight, or *d_carstdweight
-     (the live global, edited or not) for unset teams -- so exe mass edits are respected. */
-  if (anyMass) {
+     (the live global, edited or not) for unset teams -- so exe mass edits are respected.
+     Arm whenever the season OR any per-track file may set mass (a 0 table entry = stock). */
+  if (anyMass || anyPerTrack) {
     unsigned char *p = (unsigned char *)IDAtoFlat(0x2C510);
     if (p[0]==0x03 && p[1]==0x05) {
       pCarStdWeight = (unsigned long *)IDACodeReftoDataRef(0x2C512);
@@ -132,7 +145,7 @@ void TeamPhysInit(void)
      (66 89 46 4E) inside CalcWings? -- right after +0x170 (the front/rear split) is set, so scaling
      +0x16C here keeps balance. Replace the 10 bytes with `call MyScaleDF` + NOPs; the stub scales
      +0x16C by the team %, copies to +0x4E, and skips invalid teamNr (incl. the accel-table dummy). */
-  if (anyDF) {
+  if (anyDF || anyPerTrack) {
     unsigned char *p = (unsigned char *)IDAtoFlat(0x168C7);
     if (p[0]==0x8B && p[1]==0x86 && p[2]==0x6C && p[3]==0x01 &&
         p[6]==0x66 && p[7]==0x89 && p[8]==0x46 && p[9]==0x4E) {
@@ -144,4 +157,26 @@ void TeamPhysInit(void)
   }
 
   if (applied) PerTeamPhysics = 1;
+}
+
+/* Called from AHFSOSHook (start of session). Merge the current track's override file (if
+   any) over the season layer and (re)apply -- so per-track physics take effect and revert
+   cleanly when the track changes. Keyed on pTrackIndex (calendar slot 0..15). */
+void PerTrackPhysSOS(void)
+{
+  const OvTrack *tr;
+  int slot, haveTrack = 0;
+
+  if (!PerTeamPhysics) return;                     /* nothing armed -> nothing to do */
+  if (!pTrackIndex) return;
+  slot = (int)*pTrackIndex;                        /* 0..15 */
+  tr = OverrideTrack(slot + 1);
+  if (tr && tr->overrideFileSet) {
+    char path[512]; const char *dir = OverrideBaseDir();
+    if (dir && dir[0]) sprintf(path, "%s%s", dir, tr->overrideFile);
+    else               strcpy(path, tr->overrideFile);
+    if (OverrideParseTrackFile(path) >= 0) haveTrack = 1;
+  }
+  ApplyMerged(haveTrack);
+  if (haveTrack) { sprintf(strbuf, "- TeamPhys: per-track overrides applied (slot %d)\n", slot); LogLine(strbuf); }
 }

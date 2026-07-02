@@ -59,7 +59,8 @@ typedef struct {               /* resolved per carId (1..OV_MAXCAR-1) */
 } OvCar;
 
 typedef struct {               /* [Track N], indexed [N-1]; N = calendar slot 1..16 */
-  char magicData[128]; int magicDataSet;   /* .m2d filename, relative to the override file */
+  char magicData[128];    int magicDataSet;     /* .m2d filename (1a), relative to the override file */
+  char overrideFile[128]; int overrideFileSet;  /* per-track override filename (1b), relative to it */
 } OvTrack;
 
 void OverrideLoad(void);                  /* GP2Lap: resolve t_CaridTeamTab + parse the cfg file */
@@ -68,6 +69,13 @@ const OvTeam    *OverrideTeam(int team1); /* 1..14, NULL out of range */
 const OvCar     *OverrideCar(int carId);  /* 1..OV_MAXCAR-1, NULL out of range */
 const OvTrack   *OverrideTrack(int slot1);/* 1..16 (calendar slot), NULL out of range */
 const char      *OverrideBaseDir(void);   /* dir of the loaded override file (with trailing sep), or "" */
+
+/* Per-track override file (1b): parse a track's own override into a SEPARATE team model
+   (the season model must persist). Only physics keys are honoured (mass/downforce/power/
+   qualpower/reliability); other keys are ignored with a warning. Returns the count of
+   physics values set, or -1 if the file is missing. OverrideTrackTeam() reads the result. */
+int OverrideParseTrackFile(const char *path);
+const OvTeam    *OverrideTrackTeam(int team1); /* 1..14, NULL out of range (per-track model) */
 
 /* pure / host-testable: parse 'path', resolve car slots via caridTeamTab (>= OV_TEAMS*2 bytes).
    Returns 0 on success, -1 if the file is missing/unset. */

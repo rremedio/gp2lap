@@ -58,7 +58,10 @@ static const char *FILETXT =
   "car2 = liveries/osella_37.bmp\n"
   "\n"
   "[Team 99]\n"                        /* out of range -> skipped */
-  "car1 = nope.bmp\n";
+  "car1 = nope.bmp\n"
+  "\n"
+  "[Calendar]\n"                       /* shorten to 8 rounds (with an inline comment) */
+  "Rounds = 8   ; eight-round season\n";
 
 int main(void)
 {
@@ -120,6 +123,32 @@ int main(void)
   /* unrelated car untouched */
   c = OverrideCar(1);
   CHECK(c && !c->liverySet);
+
+  /* [Calendar] Rounds = 8 (inline comment tolerated) */
+  CHECK(OverrideCalendarRounds() == 8);
+
+  /* invalid Rounds -> rejected (0 = stock) */
+  {
+    const char *p2 = "/tmp/_ov_test2.cfg";
+    FILE *g2 = fopen(p2, "wb");
+    fputs("[Calendar]\nRounds = 17\n", g2); fclose(g2);       /* out of 1..16 */
+    CHECK(OverrideParseFile(p2, TAB) == 0);
+    CHECK(OverrideCalendarRounds() == 0);
+
+    g2 = fopen(p2, "wb");
+    fputs("[Calendar]\nRounds = 0\n", g2); fclose(g2);        /* zero-length */
+    CHECK(OverrideParseFile(p2, TAB) == 0);
+    CHECK(OverrideCalendarRounds() == 0);
+  }
+
+  /* absent [Calendar] -> 0 (stock 16-round) */
+  {
+    const char *p3 = "/tmp/_ov_test3.cfg";
+    FILE *g3 = fopen(p3, "wb");
+    fputs("[General]\nPitRefuelSpeed = 50\n", g3); fclose(g3);
+    CHECK(OverrideParseFile(p3, TAB) == 0);
+    CHECK(OverrideCalendarRounds() == 0);
+  }
 
   if (fails == 0) printf("\nALL PASS\n");
   else            printf("\n%d FAILURE(S)\n", fails);

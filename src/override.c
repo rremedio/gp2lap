@@ -19,6 +19,7 @@ static unsigned char g_weekendMask = 0xF3;  /* [Weekend] session mask (from stoc
 static int       g_weekendSet = 0;          /* 1 if a [Weekend] section was present */
 static int       g_sprintOn = 0;            /* [Weekend] Sprint = 1 */
 static int       g_sprintLaps = 0;          /* [Weekend] SprintLaps */
+static int       g_calRounds = 0;           /* [Calendar] Rounds = N (0 = stock 16-round) */
 
 const OvGeneral *OverrideGeneral(void)      { return &g_gen; }
 const OvTeam    *OverrideTeam(int t)        { return (t >= 1 && t <= OV_TEAMS)  ? &g_team[t-1]   : 0; }
@@ -28,6 +29,7 @@ const OvTeam    *OverrideTrackTeam(int t)   { return (t >= 1 && t <= OV_TEAMS)  
 const char      *OverrideBaseDir(void)      { return g_ovdir; }
 int OverrideWeekend(unsigned char *maskOut) { if (maskOut) *maskOut = g_weekendMask; return g_weekendSet; }
 int OverrideSprint(int *lapsOut)            { if (lapsOut) *lapsOut = g_sprintLaps; return g_sprintOn; }
+int OverrideCalendarRounds(void) { return g_calRounds; }
 
 /* ---------------- small text helpers ---------------- */
 
@@ -134,10 +136,10 @@ int OverrideParseFile(const char *path, const unsigned char *tab)
 {
   FILE *f;
   char line[300];
-  int section = 0;            /* 0 none, 1 [General], 2 [Team N], 3 [Track N] */
+  int section = 0;            /* 0 none, 1 [General], 2 [Team N], 3 [Track N], 4 [Weekend], 5 [Calendar] */
   int team = 0, trk = 0;
   int nGen=0, nLiv=0, nCk=0, nShape=0, nNose=0, nMass=0, nDf=0;
-  int nDrv=0, nTeam=0, nPit=0, nTrack=0, nWeekend=0;
+  int nDrv=0, nTeam=0, nPit=0, nTrack=0, nWeekend=0, nCal=0;
 
   memset(&g_gen,  0, sizeof(g_gen));
   memset(g_team,  0, sizeof(g_team));
@@ -145,6 +147,7 @@ int OverrideParseFile(const char *path, const unsigned char *tab)
   memset(g_track, 0, sizeof(g_track));
   g_weekendMask = 0xF3; g_weekendSet = 0;
   g_sprintOn = 0; g_sprintLaps = 0;
+  g_calRounds = 0;
 
   if (!path || !path[0]) return -1;
 
@@ -185,7 +188,8 @@ int OverrideParseFile(const char *path, const unsigned char *tab)
         else { section = 0;
                sprintf(strbuf, "- Override: [%s] track out of range; skipped\n", p); LogLine(strbuf); }
       }
-      else if (ieq(p, "weekend")) { section = 4; g_weekendMask = 0xF3; g_weekendSet = 1; }
+      else if (ieq(p, "weekend"))  { section = 4; g_weekendMask = 0xF3; g_weekendSet = 1; }
+      else if (ieq(p, "calendar")) { section = 5; }
       else { section = 0;
                sprintf(strbuf, "- Override: unknown section [%s]; ignored\n", p); LogLine(strbuf); }
       continue;
@@ -273,14 +277,22 @@ int OverrideParseFile(const char *path, const unsigned char *tab)
       else if (ieq(key,"sprintlaps")) { g_sprintLaps = atoi(val); nWeekend++; }
       else { sprintf(strbuf,"- Override: unknown key '%s' in [Weekend]; ignored\n", key); LogLine(strbuf); }
     }
+    else if (section == 5) {                      /* ---- [Calendar] ---- variable season length */
+      if (ieq(key,"rounds")) {
+        int r = atoi(val);
+        if (r >= 1 && r <= OV_MAXROUNDS) { g_calRounds = r; nCal++; }
+        else { g_calRounds = 0; LogLine("- Override: [Calendar] Rounds must be 1..16; ignored\n"); }
+      }
+      else { sprintf(strbuf,"- Override: unknown key '%s' in [Calendar]; ignored\n", key); LogLine(strbuf); }
+    }
     else {
       sprintf(strbuf,"- Override: key '%s' before any section; ignored\n", key); LogLine(strbuf);
     }
   }
   fclose(f);
 
-  sprintf(strbuf, "- Override: '%s' loaded - General:%d liveries:%d cockpits:%d shapes:%d noses:%d mass:%d df:%d driver:%d teamperf:%d pitcrew:%d track:%d weekend:%d\n",
-          path, nGen, nLiv, nCk, nShape, nNose, nMass, nDf, nDrv, nTeam, nPit, nTrack, nWeekend);
+  sprintf(strbuf, "- Override: '%s' loaded - General:%d liveries:%d cockpits:%d shapes:%d noses:%d mass:%d df:%d driver:%d teamperf:%d pitcrew:%d track:%d weekend:%d calendar:%d\n",
+          path, nGen, nLiv, nCk, nShape, nNose, nMass, nDf, nDrv, nTeam, nPit, nTrack, nWeekend, nCal);
   LogLine(strbuf);
   return 0;
 }

@@ -69,6 +69,7 @@ static const char *FILETXT =
   "Num1 = 30\n"
   "Qual1 = 14000\n"
   "Race1 = 13800\n"
+  "car1 = liveries/larrousse_30.bmp\n"  /* per-car, added team: deferred to Num1=30 */
   "\n"
   "[Team 16]\n"                        /* incomplete (no EngineName/Power) -> stops the count */
   "TeamName = Coloni\n"
@@ -148,9 +149,14 @@ int main(void)
   CHECK(OverrideTeamDefined(17) == 0);
   {
     const OvTeam *t15 = OverrideTeam(15);
+    const OvCar  *c30;
     CHECK(t15 && t15->teamNameSet && strcmp(t15->teamName, "Larrousse") == 0);
     CHECK(t15->powerSet && t15->power == 700);
     CHECK(t15->drv[0].numSet && t15->drv[0].num == 30);
+    CHECK(t15->liverySet && strcmp(t15->livery, "liveries/larrousse.bmp") == 0);
+    /* deferred per-car livery resolved onto carId 30 (Num1) */
+    c30 = OverrideCar(30);
+    CHECK(c30 && c30->liverySet && strcmp(c30->livery, "liveries/larrousse_30.bmp") == 0);
   }
 
   /* invalid Rounds -> rejected (0 = stock) */

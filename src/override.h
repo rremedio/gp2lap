@@ -55,6 +55,9 @@ typedef struct {               /* [Team N], indexed [N-1] */
   char teamName[13];   int teamNameSet;   /* constructor name, up to 12 chars + NUL */
   char engineName[13]; int engineNameSet; /* engine name, up to 12 chars + NUL */
   char livery[256];    int liverySet;     /* team base body atlas BMP (4a.2); required for teams 15..20 */
+  char carLivery[2][256]; int carLiverySet[2]; /* per-seat Car1/Car2 BMP, DEFERRED for added teams
+                                        15..20 (t_CaridTeamTab empty at parse time -> resolved to the
+                                        seat's Num after the file is read; 4a.2b) */
 } OvTeam;
 
 typedef struct {               /* resolved per carId (1..OV_MAXCAR-1) */

@@ -32,9 +32,11 @@ static unsigned long  *s_pCount  = 0;      /* dword_184A28 running item count */
 /* --- per added-team livery slots --- */
 static int            g_n = 0;
 static int            g_jam[CL_MAX];        /* jam-id = 573 + slot */
-static unsigned char *g_img[CL_MAX];        /* index image, 256x164 (persistent) */
-static unsigned char *g_pal[CL_MAX];        /* 4 sub-palettes x palN (persistent) */
+static unsigned char *g_img[CL_MAX];        /* WORKING index image (cartex overwrites per-car draw) */
+static unsigned char *g_pal[CL_MAX];        /* WORKING 4 sub-palettes x palN */
 static int            g_palN[CL_MAX];
+static unsigned char *g_base[CL_MAX];        /* pristine base image (re-decrypt substitute) */
+static unsigned char *g_basePal[CL_MAX];     /* pristine base palette */
 
 /* Load one 256x164x8 BMP into a fresh CL_SZ buffer (top-down atlas order). */
 static unsigned char *LoadBmp(const char *path)
@@ -137,6 +139,13 @@ void CarLiveryInit(void)
     g_pal[g_n] = (unsigned char *)malloc(4 * 256);
     if (!g_pal[g_n]) { free(img); LogLine("- CarLivery: pal malloc FAILED\n"); continue; }
     for (s = 0; s < 4; s++) memcpy(g_pal[g_n] + s * pn, carpal, pn);
+    /* keep a pristine copy of the base: the engine re-decrypts stock atlases to stock each
+       weekend, but our buffers persist, so cartex's per-car overwrite would otherwise leave a
+       stale livery as the "base" for a non-override teammate. Restore working<-base at each SOS. */
+    g_base[g_n]    = (unsigned char *)malloc(CL_SZ);
+    g_basePal[g_n] = (unsigned char *)malloc(4 * 256);
+    if (g_base[g_n])    memcpy(g_base[g_n], img, CL_SZ);
+    if (g_basePal[g_n]) memcpy(g_basePal[g_n], g_pal[g_n], 4 * pn);
     g_img[g_n]  = img;
     g_palN[g_n] = pn;
     g_jam[g_n]  = CL_JAMBASE + g_n;
@@ -168,5 +177,12 @@ void CarLiveryInit(void)
 
 void CarLiverySOS(void)
 {
+  int i;
   RegisterPass();                                      /* map is wiped per weekend -> re-register */
+  /* restore each working atlas to its pristine base so cartex snapshots the base, not a stale
+     per-car livery left over from the previous session's last draw (4a.2b). */
+  for (i = 0; i < g_n; i++) {
+    if (g_base[i]    && g_img[i]) memcpy(g_img[i], g_base[i], CL_SZ);
+    if (g_basePal[i] && g_pal[i]) memcpy(g_pal[i], g_basePal[i], 4 * g_palN[i]);
+  }
 }

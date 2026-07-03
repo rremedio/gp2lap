@@ -13,7 +13,8 @@
 #define CT_H      164
 #define CT_SZ     (CT_W * CT_H)      /* 41984 */
 #define CT_MAXCAR 64                 /* carId masked to 0x3F */
-#define CT_TEAMS  14
+#define CT_TEAMS  20                 /* stock 14 + override-added 15..20 (4a.2b); s_pCache /
+                                        s_pTeamTab / cockpit tables are all >=20-wide */
 
 unsigned long PerCarTextures = 0;
 unsigned long PerCarCockpit  = 0;
@@ -115,21 +116,12 @@ void CarTexInit(void)
   s_pCache  = (unsigned char  *)IDACodeReftoDataRef(0x65D74);  /* &unk_D6CC0 (number-blit cache) */
   s_pTeamTab= (unsigned char  *)IDACodeReftoDataRef(0x65D67);  /* &t_CaridTeamTab (first driver per team) */
 
-  /* Pre-allocate pristine snapshot buffers (avoid malloc in the render path).
-     If any allocation fails, disable cleanly: with a missing snapshot a
-     non-overridden teammate would not be restored and would keep the previous
-     car's livery (its restore branch is skipped). */
-  for (i = 0; i < CT_TEAMS; i++) {
-    s_snap[i] = (unsigned char *)malloc(CT_SZ);
-    s_snapped[i] = 0;
-    if (!s_snap[i]) {
-      int j;
-      LogLine("- CarTex: snapshot alloc FAILED; DISABLED\n");
-      for (j = 0; j < CT_TEAMS;  j++) if (s_snap[j]) { free(s_snap[j]); s_snap[j] = 0; }
-      for (j = 0; j < CT_MAXCAR; j++) if (s_img[j])  { free(s_img[j]);  s_img[j]  = 0; }
-      return;
-    }
-  }
+  /* Snapshots are allocated LAZILY (per team, on that team's first per-car draw) -- only teams
+     actually drawn with a per-car override ever need one. Pre-allocating all CT_TEAMS wasted
+     ~0.8MB of the DOS4GW heap and could fail outright when JamTextureExtraMB reserves a large
+     pool. s_snap[]/s_snapped[] are zero-initialised statics; a failed lazy alloc just skips the
+     restore for that team (its non-override teammate keeps the previous livery -- no crash). */
+  for (i = 0; i < CT_TEAMS; i++) { s_snap[i] = 0; s_snapped[i] = 0; }
   s_snapCsum = 0;
 
   PerCarTextures = 1;
@@ -175,9 +167,9 @@ void __near _cdecl AHFCarTexSwap(void)
   car = *s_pCar;                          /* dword_D5490 */
   if (!car) return;
 
-  team = (int)(car[0x25] & 0xFF) - 1;     /* teamNr 1..14 -> 0..13 (engine clamps >=0) */
+  team = (int)(car[0x25] & 0xFF) - 1;     /* teamNr 1..20 -> 0..19 (engine clamps >=0) */
   if (team < 0) team = 0;
-  if (team >= CT_TEAMS) return;
+  if (team >= CT_TEAMS) return;           /* added teams 15..20 resolve their own atlas via word_18330A (4a.2 remap) */
 
   carId = car[0xA6] & 0x3F;               /* strip player bit7 */
 
@@ -202,8 +194,12 @@ void __near _cdecl AHFCarTexSwap(void)
   if (palSz < 1 || palSz > 256) return;
 
   /* Snapshot the STOCK atlas image + its 4 sub-palettes + pal_sz once per team (to restore
-     non-override cars; the palette is shared per team, so an override teammate dirties it). */
+     non-override cars; the palette is shared per team, so an override teammate dirties it).
+     Allocate the buffer lazily here on first use. For added teams 15..20 the "stock" atlas is
+     carlivery's registered base, which CarLiverySOS restores to pristine at session start, so
+     this captures the base correctly too. */
   if (!s_snapped[team]) {
+    if (!s_snap[team]) s_snap[team] = (unsigned char *)malloc(CT_SZ);   /* lazy: only drawn teams */
     if (s_snap[team]) {
       memcpy(s_snap[team], atlas, CT_SZ);
       memcpy(s_snappal[team], pal0, 4 * palSz);

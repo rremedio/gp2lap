@@ -247,8 +247,12 @@ int OverrideParseFile(const char *path, const unsigned char *tab)
     }
     else if (section == 2) {                      /* ---- [Team N] ---- */
       if (ieq(key,"car1") || ieq(key,"car2")) {
-        int carId = slotCar(tab, team, key[3]-'1');
+        int slot  = key[3]-'1';
+        int carId = slotCar(tab, team, slot);
         if (carId) { copyval(g_car[carId].livery, val); g_car[carId].liverySet = 1; nLiv++; }
+        else if (team > OV_STOCKTEAMS) {   /* added team: tab empty at parse time -> defer to its Num */
+          copyval(g_team[team-1].carLivery[slot], val); g_team[team-1].carLiverySet[slot] = 1; nLiv++;
+        }
         else { sprintf(strbuf,"- Override: [Team %d] %s ignored (no driver in that slot)\n", team, key); LogLine(strbuf); }
       }
       else if (ieq(key,"cp1") || ieq(key,"cp2")) {
@@ -326,6 +330,20 @@ int OverrideParseFile(const char *path, const unsigned char *tab)
     }
   }
   fclose(f);
+
+  /* resolve deferred added-team (15..20) per-car liveries: the whole file is read now, so each
+     seat's Num is known -> attach Car1/Car2 to that carId's OvCar (4a.2b). */
+  { int tm, sl;
+    for (tm = OV_STOCKTEAMS + 1; tm <= OV_TEAMS; tm++)
+      for (sl = 0; sl < 2; sl++) {
+        int cid = g_team[tm-1].drv[sl].num;
+        if (g_team[tm-1].carLiverySet[sl] && g_team[tm-1].drv[sl].numSet && cid >= 1 && cid < OV_MAXCAR) {
+          strncpy(g_car[cid].livery, g_team[tm-1].carLivery[sl], sizeof(g_car[cid].livery)-1);
+          g_car[cid].livery[sizeof(g_car[cid].livery)-1] = 0;
+          g_car[cid].liverySet = 1;
+        }
+      }
+  }
 
   sprintf(strbuf, "- Override: '%s' loaded - General:%d liveries:%d cockpits:%d shapes:%d noses:%d mass:%d df:%d driver:%d teamperf:%d pitcrew:%d track:%d weekend:%d calendar:%d\n",
           path, nGen, nLiv, nCk, nShape, nNose, nMass, nDf, nDrv, nTeam, nPit, nTrack, nWeekend, nCal);

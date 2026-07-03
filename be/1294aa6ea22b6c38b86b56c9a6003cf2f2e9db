@@ -1,0 +1,29 @@
+src/lammcall.asm
+  s_139f2188a7591b::t_b690ab0658b247 25,77-79,878-905
+src/roster.c
+  s_e2ab62589f9c2a::t_360eb5a66bb3cf 17-18,35-38
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "be1294aa6ea22b6c38b86b56c9a6003cf2f2e9db",
+  "prompts": {},
+  "sessions": {
+    "s_139f2188a7591b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3071f96f-3060-4c18-974f-8e651c98faa2",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Roberto Remedio <rremedio@gmail.com>"
+    },
+    "s_e2ab62589f9c2a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "5c070390-e45d-4c82-a27d-311ceaaf7ba9",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Roberto Remedio <rremedio@gmail.com>"
+    }
+  }
+}

@@ -1,0 +1,21 @@
+src/calendar.h
+  s_efd04d7a9e3aea::t_dbeced3f16d31a 1-31
+tests/test_override.c
+  s_efd04d7a9e3aea::t_3f544583beb235 61-64,127-152
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "279c482deec2496dee7368c626270a450796e6a3",
+  "prompts": {},
+  "sessions": {
+    "s_efd04d7a9e3aea": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "627e5d3d-b2f7-430f-a153-8c6210037a13",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Roberto Remedio <rremedio@gmail.com>"
+    }
+  }
+}

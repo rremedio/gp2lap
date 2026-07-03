@@ -8,9 +8,10 @@
    t_CaridTeamTab (slot 0/1, 0x00 = empty/disabled). See
    docs/plans/2026-06-22-override-team-sections-design.md (in the vault). */
 
-#define OV_TEAMS   14
-#define OV_MAXCAR  64          /* carId masked to 0x3F (matches cartex CT_MAXCAR) */
-#define OV_TRACKS  16          /* calendar slots (magic data is per track slot 0..15) */
+#define OV_TEAMS     14
+#define OV_MAXCAR    64        /* carId masked to 0x3F (matches cartex CT_MAXCAR) */
+#define OV_TRACKS    16        /* track pool size (magic data is per track slot 0..15) */
+#define OV_MAXROUNDS 16        /* [Calendar] Rounds cap for 3a; >16 needs the 3b relocation */
 
 /* [General] "set" bits */
 #define OVG_REFUELSPEED   (1u<<0)
@@ -79,6 +80,12 @@ int OverrideWeekend(unsigned char *maskOut);
 /* [Weekend] sprint (2b): Sprint=1 turns the warmup slot into a 2nd (shorter) race of
    SprintLaps laps. Returns 1 if Sprint is on (and writes the lap count), else 0. */
 int OverrideSprint(int *lapsOut);
+
+/* [Calendar] variable season length (3a). Rounds=N shortens the championship to the first
+   N calendar slots (1..OV_MAXROUNDS); slots N..15 are skipped. Track order/content stays
+   stock (each slot's track is chosen via its track file + magic-data/per-track override).
+   Returns N (>0) if a valid Rounds was parsed, else 0 (stock 16-round season). */
+int OverrideCalendarRounds(void);
 
 /* Per-track override file (1b): parse a track's own override into a SEPARATE team model
    (the season model must persist). Only physics keys are honoured (mass/downforce/power/

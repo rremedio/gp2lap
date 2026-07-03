@@ -23,6 +23,7 @@
 #include "../drvdata.h"  // 2026: per-driver data override (names/skill/range/weight/num)
 #include "../magicd.h"   // 2026: per-track magic-data (.m2d) loading
 #include "../sessions.h" // 2026: [Weekend] enable/disable sessions
+#include "../calendar.h" // 2026: [Calendar] variable season length/order
 #include "../pitcrew.h"  // 2026: per-team pit-crew colours
 #include "../gridcap.h"  // 2026: small-grid support (AllowSmallGrid)
 
@@ -722,6 +723,9 @@ void __near _cdecl AHFAfterGp2Init(void)
 
   //--- 2026 --- [Weekend] enable/disable sessions (patches the 0xF3 session mask) ---
   SessionsInit();
+
+  //--- 2026 --- [Calendar] variable season length/order (sets round count + t_trackid?) ---
+  CalendarInit();
 
 #ifdef TEST
   //--- 10/98 --- dump the Strings ---------

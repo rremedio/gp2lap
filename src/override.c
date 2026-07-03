@@ -31,6 +31,40 @@ int OverrideWeekend(unsigned char *maskOut) { if (maskOut) *maskOut = g_weekendM
 int OverrideSprint(int *lapsOut)            { if (lapsOut) *lapsOut = g_sprintLaps; return g_sprintOn; }
 int OverrideCalendarRounds(void) { return g_calRounds; }
 
+/* a seat counts as a fielded driver: present name+num+skill and not explicitly disabled */
+static int seatValid(const OvDriver *d)
+{
+  if (d->disabledSet && d->disabled) return 0;
+  return d->nameSet && d->numSet && d->qualSet && d->raceSet;
+}
+
+/* an override-added team (15..20) is fieldable only with the full required set */
+static int newTeamValid(const OvTeam *t)
+{
+  return t->teamNameSet && t->engineNameSet && t->powerSet &&
+         (seatValid(&t->drv[0]) || seatValid(&t->drv[1]));
+}
+
+int OverrideTeamDefined(int team1)
+{
+  const OvTeam *t;
+  if (team1 < 1 || team1 > OV_TEAMS) return 0;
+  t = &g_team[team1 - 1];
+  return t->teamNameSet || t->engineNameSet || t->powerSet || t->shapeSet ||
+         t->massSet || t->dfSet || t->reliabilitySet ||
+         t->drv[0].nameSet || t->drv[0].numSet || t->drv[1].nameSet || t->drv[1].numSet;
+}
+
+int OverrideActiveTeams(void)
+{
+  int team, n = OV_STOCKTEAMS;                     /* 14 stock teams are always active */
+  for (team = OV_STOCKTEAMS + 1; team <= OV_TEAMS; team++) {
+    if (!newTeamValid(&g_team[team - 1])) break;   /* incomplete/absent -> stop (contiguous) */
+    n = team;
+  }
+  return n;
+}
+
 /* ---------------- small text helpers ---------------- */
 
 static char *ltrim(char *p) { while (*p == ' ' || *p == '\t') p++; return p; }

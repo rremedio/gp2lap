@@ -126,7 +126,7 @@ static int ApplyTeamEngineNames(void)
   int team, n = 0;
 
   if (!tn || !en) return -1;
-  for (team = 1; team <= OV_TEAMS; team++) {
+  for (team = 1; team <= OverrideActiveTeams(); team++) {   /* stock 14 + valid added teams */
     const OvTeam *t = OverrideTeam(team);
     if (!t) continue;
     if (t->teamNameSet)   { WriteFixedName(tn, team - 1, t->teamName);   n++; }
@@ -157,7 +157,7 @@ void DriverDataInit(void)
   for (i = 0; i < OV_MAXCAR; i++) used[i] = 0;
   g_nSlots = 0;
 
-  for (team = 1; team <= OV_TEAMS; team++) {
+  for (team = 1; team <= OverrideActiveTeams(); team++) {   /* only field validated teams */
     const OvTeam *t = OverrideTeam(team);
     if (!t) continue;
     for (slot = 0; slot < 2; slot++) {

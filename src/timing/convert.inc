@@ -24,6 +24,7 @@
 #include "../magicd.h"   // 2026: per-track magic-data (.m2d) loading
 #include "../sessions.h" // 2026: [Weekend] enable/disable sessions
 #include "../calendar.h" // 2026: [Calendar] variable season length/order
+#include "../roster.h"   // 2026: [Team 15..20] bigger roster (d_anzteams)
 #include "../pitcrew.h"  // 2026: per-team pit-crew colours
 #include "../gridcap.h"  // 2026: small-grid support (AllowSmallGrid)
 #include "../jamidcap.h" // 2026: raise the jam-id ceiling (relocate id->descriptor map)
@@ -732,6 +733,9 @@ void __near _cdecl AHFAfterGp2Init(void)
 
   //--- 2026 --- [Calendar] variable season length/order (sets round count + t_trackid?) ---
   CalendarInit();
+
+  //--- 2026 --- [Team 15..20] bigger roster: set d_anzteams from the validated added teams ---
+  RosterInit();
 
 #ifdef TEST
   //--- 10/98 --- dump the Strings ---------

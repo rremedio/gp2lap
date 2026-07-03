@@ -8,7 +8,8 @@
    t_CaridTeamTab (slot 0/1, 0x00 = empty/disabled). See
    docs/plans/2026-06-22-override-team-sections-design.md (in the vault). */
 
-#define OV_TEAMS     14
+#define OV_STOCKTEAMS 14       /* stock team count (always active); 15..20 are override-added */
+#define OV_TEAMS     20        /* max teams the engine supports (t_CaridTeamTab = 40 bytes = 20x2) */
 #define OV_MAXCAR    64        /* carId masked to 0x3F (matches cartex CT_MAXCAR) */
 #define OV_TRACKS    16        /* track pool size (magic data is per track slot 0..15) */
 #define OV_MAXROUNDS 16        /* [Calendar] Rounds cap for 3a; >16 needs the 3b relocation */
@@ -71,6 +72,15 @@ const OvTeam    *OverrideTeam(int team1); /* 1..14, NULL out of range */
 const OvCar     *OverrideCar(int carId);  /* 1..OV_MAXCAR-1, NULL out of range */
 const OvTrack   *OverrideTrack(int slot1);/* 1..16 (calendar slot), NULL out of range */
 const char      *OverrideBaseDir(void);   /* dir of the loaded override file (with trailing sep), or "" */
+
+/* Roster (4a): number of teams to field = OV_STOCKTEAMS (14, always) + a contiguous run of
+   valid override-added teams 15..20. A new team is VALID only with TeamName + EngineName +
+   Power + at least one non-disabled seat carrying Name/Num/Qual/Race; the first incomplete
+   or absent team stops the count (later teams are ignored). Drives d_anzteams and bounds the
+   driver/perf writes. OverrideTeamDefined = the team carries any [Team N] key (to warn on an
+   incomplete-but-present team). */
+int OverrideActiveTeams(void);
+int OverrideTeamDefined(int team1);
 
 /* [Weekend] session enable mask (2a). Starts from stock 0xF3; each per-session key
    sets/clears its bit (0 Fri-prac,1 Fri-qual,2 Sat-prac,3 Sat-qual,4 warmup,5 race).

@@ -25,6 +25,7 @@
 #include "../sessions.h" // 2026: [Weekend] enable/disable sessions
 #include "../calendar.h" // 2026: [Calendar] variable season length/order
 #include "../roster.h"   // 2026: [Team 15..20] bigger roster (d_anzteams)
+#include "../carlivery.h"// 2026: added-team base body liveries (4a.2)
 #include "../pitcrew.h"  // 2026: per-team pit-crew colours
 #include "../gridcap.h"  // 2026: small-grid support (AllowSmallGrid)
 #include "../jamidcap.h" // 2026: raise the jam-id ceiling (relocate id->descriptor map)
@@ -736,6 +737,9 @@ void __near _cdecl AHFAfterGp2Init(void)
 
   //--- 2026 --- [Team 15..20] bigger roster: set d_anzteams from the validated added teams ---
   RosterInit();
+
+  //--- 2026 --- added-team base body liveries: load BMPs + install the sub_677D0 remap (4a.2) ---
+  CarLiveryInit();
 
 #ifdef TEST
   //--- 10/98 --- dump the Strings ---------

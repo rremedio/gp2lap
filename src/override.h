@@ -54,6 +54,7 @@ typedef struct {               /* [Team N], indexed [N-1] */
   unsigned char pitcrew[14]; int pitcrewSet;          /* 14 ramp bases */
   char teamName[13];   int teamNameSet;   /* constructor name, up to 12 chars + NUL */
   char engineName[13]; int engineNameSet; /* engine name, up to 12 chars + NUL */
+  char livery[256];    int liverySet;     /* team base body atlas BMP (4a.2); required for teams 15..20 */
 } OvTeam;
 
 typedef struct {               /* resolved per carId (1..OV_MAXCAR-1) */

@@ -327,6 +327,7 @@ void __near _cdecl AHFSOSHook(void)
 {
   AHFFillCompounds();   /* per-car tyre compounds: bSessionMode is current at SOS */
   PerTrackPhysSOS();    /* 2026 (1b): apply the current track's per-track physics override */
+  CarLiverySOS();       /* 2026 (4a.2): re-register added-team atlases (jam map wiped per weekend) */
   InitMyTiming();
 }
 

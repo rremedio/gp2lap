@@ -22,6 +22,7 @@ _TEXT   SEGMENT BYTE PUBLIC USE32 'CODE'
         PUBLIC  GridCapPlace_
         PUBLIC  GridCapMenuHook_
         PUBLIC  SprintCave_
+        PUBLIC  MyBodyJam_
 
         EXTRN   _GP2_Found              :dword
         EXTRN   _GP2_FoundAdr           :dword
@@ -73,6 +74,9 @@ _TEXT   SEGMENT BYTE PUBLIC USE32 'CODE'
         EXTRN   _fpCarTexCode           :dword
         EXTRN   _fpCockpitColCode       :dword
         EXTRN   _fpCarShapeCode         :dword
+        EXTRN   _TeamLiveryJam          :word
+        EXTRN   _pWord18330A            :dword
+        EXTRN   _BodyJamOrig            :dword
         EXTRN   _CarShapeCarPtr         :dword
         EXTRN   _AILaunchFadeBuckets    :dword
         EXTRN   _TeamMassLbs            :dword
@@ -870,6 +874,34 @@ MyCockpitColors_ proc    near
                 popfd
                 retn
 MyCockpitColors_ endp
+
+;-------------------------------------------------------------------
+; 2026 --- 4a.2 added-team body livery remap. Installed (CarLiveryInit,
+; when any added team has a Livery) over the single call site of sub_677D0
+; (IDA 0x67A5F), re-pointed here. Runs the stock resolver first (flat addr
+; in _BodyJamOrig), then for a team 15-20 with a registered livery jam-id in
+; _TeamLiveryJam[teamNr] overwrites word_18330A with it. ESI = car ptr
+; throughout (sub_677D0 is esi-transparent).
+MyBodyJam_      proc    near
+                call    dword ptr ds:_BodyJamOrig
+                push    eax
+                push    ebx
+                push    edx
+                movzx   eax, byte ptr [esi+25h]     ; teamNr
+                cmp     eax, 20
+                ja      mbj_done
+                movzx   ebx, word ptr ds:_TeamLiveryJam[eax*2]
+                test    bx, bx
+                jz      mbj_done
+                mov     edx, ds:_pWord18330A
+                mov     [edx], bx
+mbj_done:
+                pop     edx
+                pop     ebx
+                pop     eax
+                retn
+MyBodyJam_      endp
+
 
 ;-------------------------------------------------------------------
 ; 2026 --- AI low-HP launch fix: speed-faded effective engine power.

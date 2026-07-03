@@ -38,10 +38,11 @@ static int seatValid(const OvDriver *d)
   return d->nameSet && d->numSet && d->qualSet && d->raceSet;
 }
 
-/* an override-added team (15..20) is fieldable only with the full required set */
+/* an override-added team (15..20) is fieldable only with the full required set:
+   names + power + a livery (its body atlas -- added teams have no stock JAM) + >=1 seat */
 static int newTeamValid(const OvTeam *t)
 {
-  return t->teamNameSet && t->engineNameSet && t->powerSet &&
+  return t->teamNameSet && t->engineNameSet && t->powerSet && t->liverySet &&
          (seatValid(&t->drv[0]) || seatValid(&t->drv[1]));
 }
 
@@ -258,6 +259,7 @@ int OverrideParseFile(const char *path, const unsigned char *tab)
         else { sprintf(strbuf,"- Override: [Team %d] %s bad colour triple; skipped\n", team, key); LogLine(strbuf); }
       }
       else if (ieq(key,"shape"))     { copyval(g_team[team-1].shape, val); g_team[team-1].shapeSet=1; nShape++; }
+      else if (ieq(key,"livery"))    { copyval(g_team[team-1].livery, val); g_team[team-1].liverySet=1; nShape++; }
       else if (ieq(key,"nose"))      { g_team[team-1].nose = (atoi(val)!=0)?1:0; g_team[team-1].noseSet=1; nNose++; }
       else if (ieq(key,"mass"))      { g_team[team-1].mass = strtol(val,0,0);    g_team[team-1].massSet=1; nMass++; }
       else if (ieq(key,"downforce")) { g_team[team-1].downforce = strtol(val,0,0); g_team[team-1].dfSet=1; nDf++; }

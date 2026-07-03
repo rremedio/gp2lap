@@ -64,6 +64,7 @@ static const char *FILETXT =
   "TeamName = Larrousse\n"
   "EngineName = Lamborghini\n"
   "Power = 700\n"
+  "Livery = liveries/larrousse.bmp\n"
   "Name1 = Aguri Suzuki\n"
   "Num1 = 30\n"
   "Qual1 = 14000\n"

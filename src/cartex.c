@@ -301,6 +301,10 @@ void __near _cdecl AHFCockpitColors(void)
   }
   /* fallback: reproduce stock (dec al; and eax,0FFh; eax*3; read arCockpitColors[eax+k]) */
   team = (unsigned char)(car[0x25] - 1);
+  if (team >= OV_STOCKTEAMS) team = OV_STOCKTEAMS - 1;   /* added teams 15..20: clamp to team-14's
+                                                            cockpit (a valid stock one) rather than
+                                                            reading past the 14-team arCockpitColors.
+                                                            Per-driver Cp1/Cp2 already handled above. */
   for (k = 0; k < 3; k++) s_pCkBase[k] = s_pTeamCk[team * 3 + k];
 }
 

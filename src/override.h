@@ -60,6 +60,8 @@ typedef struct {               /* [Team N], indexed [N-1] */
                                         seat's Num after the file is read) */
   char carHelmet[2][256]; int carHelmetSet[2]; /* per-seat Helmet1/Helmet2 BMP, DEFERRED for added
                                         teams (same resolution as carLivery) */
+  unsigned char carCp[2][3]; int carCpSet[2];  /* per-seat Cp1/Cp2 cockpit-colour triple, DEFERRED
+                                        for added teams (same resolution as carLivery) */
 } OvTeam;
 
 typedef struct {               /* resolved per carId (1..OV_MAXCAR-1) */

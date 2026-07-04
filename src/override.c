@@ -264,11 +264,16 @@ int OverrideParseFile(const char *path, const unsigned char *tab)
         else { sprintf(strbuf,"- Override: [Team %d] helmet%d ignored (no driver in that slot)\n", team, slot+1); LogLine(strbuf); }
       }
       else if (ieq(key,"cp1") || ieq(key,"cp2")) {
-        int carId = slotCar(tab, team, key[2]-'1');
+        int slot  = key[2]-'1';
+        int carId = slotCar(tab, team, slot);
         unsigned char tr[3];
-        if (!carId) { sprintf(strbuf,"- Override: [Team %d] %s ignored (no driver in that slot)\n", team, key); LogLine(strbuf); }
-        else if (parsetriple(val, tr)) { g_car[carId].cp[0]=tr[0]; g_car[carId].cp[1]=tr[1]; g_car[carId].cp[2]=tr[2]; g_car[carId].cpSet=1; nCk++; }
-        else { sprintf(strbuf,"- Override: [Team %d] %s bad colour triple; skipped\n", team, key); LogLine(strbuf); }
+        if (!parsetriple(val, tr)) { sprintf(strbuf,"- Override: [Team %d] %s bad colour triple; skipped\n", team, key); LogLine(strbuf); }
+        else if (carId) { g_car[carId].cp[0]=tr[0]; g_car[carId].cp[1]=tr[1]; g_car[carId].cp[2]=tr[2]; g_car[carId].cpSet=1; nCk++; }
+        else if (team > OV_STOCKTEAMS) {   /* added team: tab empty at parse time -> defer to its Num */
+          g_team[team-1].carCp[slot][0]=tr[0]; g_team[team-1].carCp[slot][1]=tr[1]; g_team[team-1].carCp[slot][2]=tr[2];
+          g_team[team-1].carCpSet[slot]=1; nCk++;
+        }
+        else { sprintf(strbuf,"- Override: [Team %d] %s ignored (no driver in that slot)\n", team, key); LogLine(strbuf); }
       }
       else if (ieq(key,"shape"))     { copyval(g_team[team-1].shape, val); g_team[team-1].shapeSet=1; nShape++; }
       else if (ieq(key,"livery"))    { copyval(g_team[team-1].livery, val); g_team[team-1].liverySet=1; nShape++; }
@@ -355,6 +360,12 @@ int OverrideParseFile(const char *path, const unsigned char *tab)
           strncpy(g_car[cid].helmet, g_team[tm-1].carHelmet[sl], sizeof(g_car[cid].helmet)-1);
           g_car[cid].helmet[sizeof(g_car[cid].helmet)-1] = 0;
           g_car[cid].helmetSet = 1;
+        }
+        if (g_team[tm-1].carCpSet[sl]) {
+          g_car[cid].cp[0] = g_team[tm-1].carCp[sl][0];
+          g_car[cid].cp[1] = g_team[tm-1].carCp[sl][1];
+          g_car[cid].cp[2] = g_team[tm-1].carCp[sl][2];
+          g_car[cid].cpSet = 1;
         }
       }
   }

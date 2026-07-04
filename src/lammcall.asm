@@ -657,12 +657,16 @@ hcartex_pl:
 Hook_CarShape:
                 pushfd
                 pushad
-                mov     ds:_CarShapeCarPtr, esi   ; stash the car being drawn (ESI)
-                call    dword ptr ds:_fpCarShapeCode   ; swap object geometry in place
+                mov     ds:_CarShapeCarPtr, esi   ; stash the car (ESI) before the original runs
                 popad
                 popfd
 hcarshape_pl:
-                call    CodeStub_       ; patched -> original sub_0_677D0 (team globals)
+                call    CodeStub_       ; patched -> original sub_0_677D0 (sets team nose/colour globals)
+                pushfd
+                pushad
+                call    dword ptr ds:_fpCarShapeCode   ; our swap + nose override, AFTER sub_677D0 (so CB358 sticks)
+                popad
+                popfd
                 retn
 
 

@@ -1,0 +1,19 @@
+src/lammcall.asm
+  s_139f2188a7591b::t_6c25337edc367f 26,81-82,908-924
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "dd9b405a06c45e167f80ee431484eecde4d54bc8",
+  "prompts": {},
+  "sessions": {
+    "s_139f2188a7591b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3071f96f-3060-4c18-974f-8e651c98faa2",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Roberto Remedio <rremedio@gmail.com>"
+    }
+  }
+}

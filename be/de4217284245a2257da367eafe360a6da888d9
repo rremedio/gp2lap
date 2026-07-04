@@ -1,0 +1,21 @@
+makefile.lin
+  s_139f2188a7591b::t_98c24ae8136295 73
+src/timing/convert.inc
+  s_139f2188a7591b::t_b413024ea09492 29,372-376
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "bede4217284245a2257da367eafe360a6da888d9",
+  "prompts": {},
+  "sessions": {
+    "s_139f2188a7591b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3071f96f-3060-4c18-974f-8e651c98faa2",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Roberto Remedio <rremedio@gmail.com>"
+    }
+  }
+}

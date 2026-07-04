@@ -1,0 +1,35 @@
+src/carlivery.c
+  s_139f2188a7591b::t_70af11ec721009 183
+src/carlivery.h
+  s_139f2188a7591b::t_93e67e86012f77 4,19
+src/cartex.c
+  s_139f2188a7591b::t_e3ad0ff55936f2 16,172
+src/lammcall.asm
+  s_139f2188a7591b::t_4f58580b97a9e2 882,909-914
+src/override.c
+  s_139f2188a7591b::t_8900bc812610ba 258,343
+src/override.h
+  s_139f2188a7591b::t_1863911bac3c0b 57,60,62,67,83
+src/roster.h
+  s_139f2188a7591b::t_39bcc54922a289 4,11
+src/timing/codehook.inc
+  s_139f2188a7591b::t_583a2b364bc38c 330
+src/timing/convert.inc
+  s_139f2188a7591b::t_257f14edc55e30 28-29,736,739
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "b68be7ac72720c9cf45edc0f03aed69057a93a4b",
+  "prompts": {},
+  "sessions": {
+    "s_139f2188a7591b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3071f96f-3060-4c18-974f-8e651c98faa2",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Roberto Remedio <rremedio@gmail.com>"
+    }
+  }
+}

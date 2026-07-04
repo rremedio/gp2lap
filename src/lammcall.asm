@@ -22,6 +22,7 @@ _TEXT   SEGMENT BYTE PUBLIC USE32 'CODE'
         PUBLIC  GridCapPlace_
         PUBLIC  GridCapMenuHook_
         PUBLIC  SprintCave_
+        PUBLIC  MyHelmetTex_
 
         EXTRN   _GP2_Found              :dword
         EXTRN   _GP2_FoundAdr           :dword
@@ -73,6 +74,8 @@ _TEXT   SEGMENT BYTE PUBLIC USE32 'CODE'
         EXTRN   _fpCarTexCode           :dword
         EXTRN   _fpCockpitColCode       :dword
         EXTRN   _fpCarShapeCode         :dword
+        EXTRN   _fpHelmetTexCode        :dword
+        EXTRN   _HelmetTexOrig          :dword
         EXTRN   _CarShapeCarPtr         :dword
         EXTRN   _AILaunchFadeBuckets    :dword
         EXTRN   _TeamMassLbs            :dword
@@ -654,12 +657,16 @@ hcartex_pl:
 Hook_CarShape:
                 pushfd
                 pushad
-                mov     ds:_CarShapeCarPtr, esi   ; stash the car being drawn (ESI)
-                call    dword ptr ds:_fpCarShapeCode   ; swap object geometry in place
+                mov     ds:_CarShapeCarPtr, esi   ; stash the car (ESI) before the original runs
                 popad
                 popfd
 hcarshape_pl:
-                call    CodeStub_       ; patched -> original sub_0_677D0 (team globals)
+                call    CodeStub_       ; patched -> original sub_0_677D0 (sets team nose/colour globals)
+                pushfd
+                pushad
+                call    dword ptr ds:_fpCarShapeCode   ; our swap + nose override, AFTER sub_677D0 (so CB358 sticks)
+                popad
+                popfd
                 retn
 
 
@@ -870,6 +877,25 @@ MyCockpitColors_ proc    near
                 popfd
                 retn
 MyCockpitColors_ endp
+
+
+;-------------------------------------------------------------------
+; 2026 --- per-driver custom helmet remap. Installed (CarHelmetInit, when any
+; driver has a Helmet BMP) over the single call site of sub_41D50 (the per-
+; textured-polygon resolver, IDA 0x440B1), re-pointed here. Runs AHFHelmetSwap
+; first (overwrites the resolved stock helmet slot's image+palette in place
+; for a carId with a custom helmet, else restores the stock snapshot), THEN
+; tail-calls the original sub_41D50 so it builds its palette LUT from ours.
+MyHelmetTex_    proc    near
+                pushfd
+                pushad
+                call    dword ptr ds:_fpHelmetTexCode   ; AHFHelmetSwap: overwrite/restore before sub_41D50
+                popad
+                popfd
+                jmp     dword ptr ds:_HelmetTexOrig     ; tail-call original sub_41D50 (rets to caller)
+MyHelmetTex_    endp
+
+
 
 ;-------------------------------------------------------------------
 ; 2026 --- AI low-HP launch fix: speed-faded effective engine power.

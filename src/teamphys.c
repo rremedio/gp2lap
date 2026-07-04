@@ -12,7 +12,8 @@
    unset = leave the exe alone), keyed on car.teamNr (+0x25). The asm stubs (lammcall.asm) read these
    tables; 0 = "team not overridden". See docs/gp2lap/runtime-physics-loading.md. */
 
-#define TP_TEAMS 14
+#define TP_TEAMS 20   /* perf/mass/DF arrays sized for the full roster; race-power table is
+                         20 words wide (0x28 to the qual table), so writing 15..20 is in-bounds */
 
 unsigned long PerTeamPhysics = 0;
 
@@ -79,7 +80,7 @@ static void ApplyMerged(int haveTrack)
 
   if (perf) { race = perf; qual = perf + TP_PERF_QUALOFS; rel = perf + TP_PERF_RELOFS; }
 
-  for (team = 1; team <= TP_TEAMS; team++) {
+  for (team = 1; team <= OverrideActiveTeams(); team++) {   /* stock 14 + validated added teams */
     const OvTeam *s  = OverrideTeam(team);
     const OvTeam *tt = haveTrack ? OverrideTrackTeam(team) : 0;
     int idx = team - 1, off = idx * 2;
@@ -118,6 +119,8 @@ static void ApplyMerged(int haveTrack)
 
     if      (tt && tt->qualpowerSet) *(unsigned short*)(qual+off) = (unsigned short)(TpClamp(tt->qualpower,0,TP_PS_MAX,"qualpower",team)+TP_PS_BIAS);
     else if (s->qualpowerSet)        *(unsigned short*)(qual+off) = (unsigned short)(TpClamp(s->qualpower, 0,TP_PS_MAX,"qualpower",team)+TP_PS_BIAS);
+    /* added teams (15..20) have no stock qual power -> default it to their (required) race power */
+    else if (team > OV_STOCKTEAMS && s->powerSet) *(unsigned short*)(qual+off) = (unsigned short)(TpClamp(s->power,0,TP_PS_MAX,"power",team)+TP_PS_BIAS);
     else                             *(unsigned short*)(qual+off) = g_stockQual[idx];
 
     if      (tt && tt->reliabilitySet) *(unsigned short*)(rel+off) = (unsigned short)TpClamp(tt->reliability,0,TP_REL_MAX,"reliability",team);
@@ -150,7 +153,7 @@ void TeamPhysInit(void)
   } else LogLine("- TeamPerf: pTeamHPQual unresolved; perf skipped\n");
 
   /* what does the season layer set, and are there any per-track override files? */
-  for (i = 1; i <= TP_TEAMS; i++)  { const OvTeam  *t  = OverrideTeam(i);  if (t->massSet) anyMass=1; if (t->dfSet) anyDF=1; if (t->dfRangeSet) anyRange=1; }
+  for (i = 1; i <= OverrideActiveTeams(); i++) { const OvTeam *t = OverrideTeam(i); if (t->massSet) anyMass=1; if (t->dfSet) anyDF=1; if (t->dfRangeSet) anyRange=1; }
   for (i = 1; i <= OV_TRACKS; i++) { const OvTrack *tr = OverrideTrack(i); if (tr && tr->overrideFileSet) anyPerTrack=1; }
 
   ApplyMerged(0);   /* apply the season layer (mass/DF tables + perf tables) */
@@ -214,7 +217,7 @@ void PerTrackPhysSOS(void)
     int team, any = 0;
     char *w = strbuf;
     w += sprintf(w, "- TeamPhys: DF wobble (slot %d):", slot);
-    for (team = 1; team <= TP_TEAMS; team++) {
+    for (team = 1; team <= OverrideActiveTeams(); team++) {
       const OvTeam *s  = OverrideTeam(team);
       const OvTeam *tt = haveTrack ? OverrideTrackTeam(team) : 0;
       int range = (tt && tt->dfRangeSet) ? (int)tt->dfRange : (s->dfRangeSet ? (int)s->dfRange : 0);

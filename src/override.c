@@ -31,6 +31,41 @@ int OverrideWeekend(unsigned char *maskOut) { if (maskOut) *maskOut = g_weekendM
 int OverrideSprint(int *lapsOut)            { if (lapsOut) *lapsOut = g_sprintLaps; return g_sprintOn; }
 int OverrideCalendarRounds(void) { return g_calRounds; }
 
+/* a seat counts as a fielded driver: present name+num+skill and not explicitly disabled */
+static int seatValid(const OvDriver *d)
+{
+  if (d->disabledSet && d->disabled) return 0;
+  return d->nameSet && d->numSet && d->qualSet && d->raceSet;
+}
+
+/* an override-added team (15..20) is fieldable only with the full required set:
+   names + power + a livery (its body atlas -- added teams have no stock JAM) + >=1 seat */
+static int newTeamValid(const OvTeam *t)
+{
+  return t->teamNameSet && t->engineNameSet && t->powerSet && t->liverySet &&
+         (seatValid(&t->drv[0]) || seatValid(&t->drv[1]));
+}
+
+int OverrideTeamDefined(int team1)
+{
+  const OvTeam *t;
+  if (team1 < 1 || team1 > OV_TEAMS) return 0;
+  t = &g_team[team1 - 1];
+  return t->teamNameSet || t->engineNameSet || t->powerSet || t->shapeSet ||
+         t->massSet || t->dfSet || t->reliabilitySet ||
+         t->drv[0].nameSet || t->drv[0].numSet || t->drv[1].nameSet || t->drv[1].numSet;
+}
+
+int OverrideActiveTeams(void)
+{
+  int team, n = OV_STOCKTEAMS;                     /* 14 stock teams are always active */
+  for (team = OV_STOCKTEAMS + 1; team <= OV_TEAMS; team++) {
+    if (!newTeamValid(&g_team[team - 1])) break;   /* incomplete/absent -> stop (contiguous) */
+    n = team;
+  }
+  return n;
+}
+
 /* ---------------- small text helpers ---------------- */
 
 static char *ltrim(char *p) { while (*p == ' ' || *p == '\t') p++; return p; }
@@ -212,18 +247,36 @@ int OverrideParseFile(const char *path, const unsigned char *tab)
     }
     else if (section == 2) {                      /* ---- [Team N] ---- */
       if (ieq(key,"car1") || ieq(key,"car2")) {
-        int carId = slotCar(tab, team, key[3]-'1');
+        int slot  = key[3]-'1';
+        int carId = slotCar(tab, team, slot);
         if (carId) { copyval(g_car[carId].livery, val); g_car[carId].liverySet = 1; nLiv++; }
+        else if (team > OV_STOCKTEAMS) {   /* added team: tab empty at parse time -> defer to its Num */
+          copyval(g_team[team-1].carLivery[slot], val); g_team[team-1].carLiverySet[slot] = 1; nLiv++;
+        }
         else { sprintf(strbuf,"- Override: [Team %d] %s ignored (no driver in that slot)\n", team, key); LogLine(strbuf); }
       }
+      else if (slotKey(key,"helmet",&slot)) {           /* per-driver custom helmet BMP */
+        int carId = slotCar(tab, team, slot);
+        if (carId) { copyval(g_car[carId].helmet, val); g_car[carId].helmetSet = 1; nLiv++; }
+        else if (team > OV_STOCKTEAMS) {   /* added team: defer to the seat's Num */
+          copyval(g_team[team-1].carHelmet[slot], val); g_team[team-1].carHelmetSet[slot] = 1; nLiv++;
+        }
+        else { sprintf(strbuf,"- Override: [Team %d] helmet%d ignored (no driver in that slot)\n", team, slot+1); LogLine(strbuf); }
+      }
       else if (ieq(key,"cp1") || ieq(key,"cp2")) {
-        int carId = slotCar(tab, team, key[2]-'1');
+        int slot  = key[2]-'1';
+        int carId = slotCar(tab, team, slot);
         unsigned char tr[3];
-        if (!carId) { sprintf(strbuf,"- Override: [Team %d] %s ignored (no driver in that slot)\n", team, key); LogLine(strbuf); }
-        else if (parsetriple(val, tr)) { g_car[carId].cp[0]=tr[0]; g_car[carId].cp[1]=tr[1]; g_car[carId].cp[2]=tr[2]; g_car[carId].cpSet=1; nCk++; }
-        else { sprintf(strbuf,"- Override: [Team %d] %s bad colour triple; skipped\n", team, key); LogLine(strbuf); }
+        if (!parsetriple(val, tr)) { sprintf(strbuf,"- Override: [Team %d] %s bad colour triple; skipped\n", team, key); LogLine(strbuf); }
+        else if (carId) { g_car[carId].cp[0]=tr[0]; g_car[carId].cp[1]=tr[1]; g_car[carId].cp[2]=tr[2]; g_car[carId].cpSet=1; nCk++; }
+        else if (team > OV_STOCKTEAMS) {   /* added team: tab empty at parse time -> defer to its Num */
+          g_team[team-1].carCp[slot][0]=tr[0]; g_team[team-1].carCp[slot][1]=tr[1]; g_team[team-1].carCp[slot][2]=tr[2];
+          g_team[team-1].carCpSet[slot]=1; nCk++;
+        }
+        else { sprintf(strbuf,"- Override: [Team %d] %s ignored (no driver in that slot)\n", team, key); LogLine(strbuf); }
       }
       else if (ieq(key,"shape"))     { copyval(g_team[team-1].shape, val); g_team[team-1].shapeSet=1; nShape++; }
+      else if (ieq(key,"livery"))    { copyval(g_team[team-1].livery, val); g_team[team-1].liverySet=1; nShape++; }
       else if (ieq(key,"nose"))      { g_team[team-1].nose = (atoi(val)!=0)?1:0; g_team[team-1].noseSet=1; nNose++; }
       else if (ieq(key,"mass"))      { g_team[team-1].mass = strtol(val,0,0);    g_team[team-1].massSet=1; nMass++; }
       else if (ieq(key,"downforce")) { g_team[team-1].downforce = strtol(val,0,0); g_team[team-1].dfSet=1; nDf++; }
@@ -290,6 +343,32 @@ int OverrideParseFile(const char *path, const unsigned char *tab)
     }
   }
   fclose(f);
+
+  /* resolve deferred added-team (15..20) per-car liveries: the whole file is read now, so each
+     seat's Num is known -> attach Car1/Car2 to that carId's OvCar. */
+  { int tm, sl;
+    for (tm = OV_STOCKTEAMS + 1; tm <= OV_TEAMS; tm++)
+      for (sl = 0; sl < 2; sl++) {
+        int cid = g_team[tm-1].drv[sl].num;
+        if (!g_team[tm-1].drv[sl].numSet || cid < 1 || cid >= OV_MAXCAR) continue;
+        if (g_team[tm-1].carLiverySet[sl]) {
+          strncpy(g_car[cid].livery, g_team[tm-1].carLivery[sl], sizeof(g_car[cid].livery)-1);
+          g_car[cid].livery[sizeof(g_car[cid].livery)-1] = 0;
+          g_car[cid].liverySet = 1;
+        }
+        if (g_team[tm-1].carHelmetSet[sl]) {
+          strncpy(g_car[cid].helmet, g_team[tm-1].carHelmet[sl], sizeof(g_car[cid].helmet)-1);
+          g_car[cid].helmet[sizeof(g_car[cid].helmet)-1] = 0;
+          g_car[cid].helmetSet = 1;
+        }
+        if (g_team[tm-1].carCpSet[sl]) {
+          g_car[cid].cp[0] = g_team[tm-1].carCp[sl][0];
+          g_car[cid].cp[1] = g_team[tm-1].carCp[sl][1];
+          g_car[cid].cp[2] = g_team[tm-1].carCp[sl][2];
+          g_car[cid].cpSet = 1;
+        }
+      }
+  }
 
   sprintf(strbuf, "- Override: '%s' loaded - General:%d liveries:%d cockpits:%d shapes:%d noses:%d mass:%d df:%d driver:%d teamperf:%d pitcrew:%d track:%d weekend:%d calendar:%d\n",
           path, nGen, nLiv, nCk, nShape, nNose, nMass, nDf, nDrv, nTeam, nPit, nTrack, nWeekend, nCal);

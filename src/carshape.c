@@ -20,8 +20,10 @@
      so NO pointer rebasing is needed (the .dat's own pointers are link-time and would be garbage at
      runtime). Same-topology .dats only (shared face/edge/point order). See docs/per-team-car-shapes.md. */
 
-#define CS_TEAMS 14
+#define CS_TEAMS 20             /* teams 1..20 (stock 14 + override-added 15..20) */
 #define CS_OBJSZ 54536          /* size of the car object block (o_interobj00) */
+/* Stock teams 1..14 own a slot in the 14-wide game arrays (dword_CB394 nose picks); added teams
+   15..20 clamp (in sub_677D0) to team-14's pool, so their nose is applied per-draw to CB358. */
 
 unsigned long PerTeamNose  = 0;
 unsigned long PerTeamShape = 0;
@@ -39,20 +41,25 @@ static unsigned long  s_ptsSz  = 0;              /* points section size (bytes) 
 static unsigned long  s_sclOff = 0;              /* scale-ramp section offset within the object */
 static unsigned long  s_sclSz  = 0;              /* scale-ramp section size (bytes) */
 static int            s_curTeam = -1;            /* team whose geometry is currently in s_objBuf */
+static unsigned char  s_nose[CS_TEAMS];          /* per-team nose pick (0 low / 1 high), 0-based */
+static unsigned char  s_noseSet[CS_TEAMS];       /* 1 if this team set nose= */
+static unsigned long *s_pCB358 = 0;              /* &dword_CB358: the current car's nose morph pick
+                                                    (sub_677D0 writes it from CB394[clampedTeam];
+                                                    we override it per-draw for added teams 15..20) */
 
 /* ---------------- tier 1: per-team nose ---------------- */
 
 static void CarShapeInitNose(const char *cfg)
 {
-  unsigned char nose[CS_TEAMS], set[CS_TEAMS], *site;
+  unsigned char *site, *site2;
   unsigned long *pCB394;
   int i, loaded;
 
-  for (i = 0; i < CS_TEAMS; i++) { nose[i] = 0; set[i] = 0; }
+  for (i = 0; i < CS_TEAMS; i++) { s_nose[i] = 0; s_noseSet[i] = 0; }
   loaded = 0;
   for (i = 0; i < CS_TEAMS; i++) {
     const OvTeam *t = OverrideTeam(i + 1);
-    if (t->noseSet) { nose[i] = (unsigned char)t->nose; set[i] = 1; loaded++; }
+    if (t && t->noseSet) { s_nose[i] = (unsigned char)t->nose; s_noseSet[i] = 1; loaded++; }
   }
   if (loaded < 1) return;
 
@@ -66,10 +73,22 @@ static void CarShapeInitNose(const char *cfg)
     LogLine(strbuf);
     return;
   }
-  pCB394 = (unsigned long *)IDACodeReftoDataRef(0x6781B);   /* &dword_CB394[0] (runtime flat addr) */
+  /* dword_CB358 write in sub_677D0:  0006781F  A3 <disp32>  mov dword_CB358, eax -- we re-write it
+     per-draw for added teams (their clamped CB394 read gives team-14's nose, not their own). */
+  site2 = (unsigned char *)IDAtoFlat(0x6781F);
+  if (site2[0] != 0xA3) {
+    sprintf(strbuf, "- PerTeamNose: opcode mismatch at 0x6781F (%02X); DISABLED\n", site2[0]);
+    LogLine(strbuf);
+    return;
+  }
+  pCB394   = (unsigned long *)IDACodeReftoDataRef(0x6781B);   /* &dword_CB394[0] (14-wide) */
+  s_pCB358 = (unsigned long *)IDACodeReftoDataRef(0x67820);   /* &dword_CB358 (per-draw nose pick) */
 
-  for (i = 0; i < CS_TEAMS; i++)
-    if (set[i]) pCB394[i] = nose[i];
+  /* stock teams 1..14: static pick straight into the 14-wide CB394. Added teams 15..20 clamp to
+     team-14's CB394 slot, so writing CB394[i>=14] would be out of bounds -- their nose is applied
+     per-draw to CB358 in AHFCarShapeSwap instead. */
+  for (i = 0; i < OV_STOCKTEAMS; i++)
+    if (s_noseSet[i]) pCB394[i] = s_nose[i];
 
   PerTeamNose = 1;
   sprintf(strbuf, "- PerTeamNose: ON (%d team nose override(s))\n", loaded);
@@ -119,7 +138,7 @@ void __near _cdecl AHFCarShapeSwap(void)
   unsigned char *car;
   int team;
 
-  if (!PerTeamShape) return;
+  if (!PerTeamShape && !PerTeamNose) return;
   car = CarShapeCarPtr;
   if (!car) return;
 
@@ -127,20 +146,31 @@ void __near _cdecl AHFCarShapeSwap(void)
   if (team < 0) team = 0;
   if (team >= CS_TEAMS) return;
 
-  if (s_dat[team]) {                            /* this team has an override shape */
-    if (s_curTeam != team) {
-      memcpy(s_objBuf + s_ptsOff, s_dat[team] + s_ptsOff, s_ptsSz);   /* team vertices */
-      memcpy(s_objBuf + s_sclOff, s_dat[team] + s_sclOff, s_sclSz);   /* team scale ramp */
-      s_curTeam = team;
-    }
-  } else {                                      /* no override -> restore stock geometry */
-    if (s_curTeam != -1) {
-      memcpy(s_objBuf + s_ptsOff, s_pristine + s_ptsOff, s_ptsSz);
-      memcpy(s_objBuf + s_sclOff, s_pristine + s_sclOff, s_sclSz);
-      s_curTeam = -1;
+  /* tier 2: per-team .dat geometry for all 20 teams. The restore branch (no override) is what
+     stops an added car from inheriting the last-drawn team's geometry (the flicker) -- previously
+     teams >=14 returned early and did neither swap nor restore. */
+  if (PerTeamShape) {
+    if (s_dat[team]) {                          /* this team has an override shape */
+      if (s_curTeam != team) {
+        memcpy(s_objBuf + s_ptsOff, s_dat[team] + s_ptsOff, s_ptsSz);   /* team vertices */
+        memcpy(s_objBuf + s_sclOff, s_dat[team] + s_sclOff, s_sclSz);   /* team scale ramp */
+        s_curTeam = team;
+      }
+    } else {                                    /* no override -> restore stock geometry */
+      if (s_curTeam != -1) {
+        memcpy(s_objBuf + s_ptsOff, s_pristine + s_ptsOff, s_ptsSz);
+        memcpy(s_objBuf + s_sclOff, s_pristine + s_sclOff, s_sclSz);
+        s_curTeam = -1;
+      }
     }
   }
-  /* original sub_677D0 (chained from the asm stub) sets the team nose/colour globals */
+
+  /* tier 1: this body now runs AFTER sub_677D0 (see Hook_CarShape), which just set CB358 from the
+     clamped CB394 pick -- for an added team that's team-14's nose, not its own. Override CB358
+     with this team's nose (or a low-nose default). Stock teams already have the right CB358 from
+     their own CB394 slot, so leave them alone. */
+  if (PerTeamNose && s_pCB358 && team >= OV_STOCKTEAMS)
+    *s_pCB358 = s_noseSet[team] ? (unsigned long)s_nose[team] : 0;
 }
 
 void (__near _cdecl *fpCarShapeCode)(void) = AHFCarShapeSwap;

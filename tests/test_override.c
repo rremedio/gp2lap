@@ -60,6 +60,23 @@ static const char *FILETXT =
   "[Team 99]\n"                        /* out of range -> skipped */
   "car1 = nope.bmp\n"
   "\n"
+  "[Team 15]\n"                        /* added team, fully valid -> fielded */
+  "TeamName = Larrousse\n"
+  "EngineName = Lamborghini\n"
+  "Power = 700\n"
+  "Livery = liveries/larrousse.bmp\n"
+  "Name1 = Aguri Suzuki\n"
+  "Num1 = 30\n"
+  "Qual1 = 14000\n"
+  "Race1 = 13800\n"
+  "car1 = liveries/larrousse_30.bmp\n"  /* per-car, added team: deferred to Num1=30 */
+  "helmet1 = helmets/foitek.bmp\n"      /* per-driver helmet, added team: deferred to Num1=30 */
+  "\n"
+  "[Team 16]\n"                        /* incomplete (no EngineName/Power) -> stops the count */
+  "TeamName = Coloni\n"
+  "Name1 = Pedro Chaves\n"
+  "Num1 = 31\n"
+  "\n"
   "[Calendar]\n"                       /* shorten to 8 rounds (with an inline comment) */
   "Rounds = 8   ; eight-round season\n";
 
@@ -126,6 +143,23 @@ int main(void)
 
   /* [Calendar] Rounds = 8 (inline comment tolerated) */
   CHECK(OverrideCalendarRounds() == 8);
+
+  /* roster: team 15 valid -> active 15; team 16 incomplete -> stops there, but is "defined" */
+  CHECK(OverrideActiveTeams() == 15);
+  CHECK(OverrideTeamDefined(16) == 1);
+  CHECK(OverrideTeamDefined(17) == 0);
+  {
+    const OvTeam *t15 = OverrideTeam(15);
+    const OvCar  *c30;
+    CHECK(t15 && t15->teamNameSet && strcmp(t15->teamName, "Larrousse") == 0);
+    CHECK(t15->powerSet && t15->power == 700);
+    CHECK(t15->drv[0].numSet && t15->drv[0].num == 30);
+    CHECK(t15->liverySet && strcmp(t15->livery, "liveries/larrousse.bmp") == 0);
+    /* deferred per-car livery resolved onto carId 30 (Num1) */
+    c30 = OverrideCar(30);
+    CHECK(c30 && c30->liverySet && strcmp(c30->livery, "liveries/larrousse_30.bmp") == 0);
+    CHECK(c30->helmetSet && strcmp(c30->helmet, "helmets/foitek.bmp") == 0);
+  }
 
   /* invalid Rounds -> rejected (0 = stock) */
   {

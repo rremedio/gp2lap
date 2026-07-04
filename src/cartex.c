@@ -21,6 +21,7 @@ unsigned long PerCarCockpit  = 0;
 
 static unsigned char *s_img[CT_MAXCAR];   /* override image per carId (NULL = none) */
 static int            s_remapped[CT_MAXCAR]; /* override image converted global->local indices yet? */
+static unsigned char  s_baked[CT_MAXCAR]; /* 1 = per-car livery (number baked, suppress blit); 0 = added-team base (engine blits number) */
 static unsigned char *s_snap[CT_TEAMS];   /* pristine (stock) atlas snapshot per team */
 static int            s_snapped[CT_TEAMS];
 static unsigned char  s_carpal[CT_MAXCAR][256];  /* per-car flat sub0 palette (built from its BMP) */
@@ -73,20 +74,39 @@ static unsigned char *CarTexLoadBmp(const char *path)
 void CarTexInit(void)
 {
   char *cfg;
-  int i, loaded;
+  int i, team, loaded;
   unsigned char *s1, *s2, *s3, *s4, *s5, *s6, *s7;
 
   cfg = GetCfgString("SeasonOverrides");
   if (!cfg || !cfg[0]) return;                 /* key absent -> feature off */
 
-  loaded = 0;                                  /* pull resolved liveries from the shared model */
+  loaded = 0;                                  /* pull resolved per-car liveries (Car1/Car2) from the shared model */
   for (i = 1; i < CT_MAXCAR; i++) {
     const OvCar *o = OverrideCar(i);
     if (o && o->liverySet && o->livery[0]) {
       if (s_img[i]) { free(s_img[i]); s_img[i] = 0; }
       s_img[i] = CarTexLoadBmp(o->livery);
-      if (s_img[i]) { loaded++;
+      if (s_img[i]) { s_baked[i] = 1; loaded++;       /* per-car BMP: number baked in -> suppress the engine blit */
         sprintf(strbuf, "- CarTex: car%02d <- %s\n", i, o->livery); LogLine(strbuf); }
+    }
+  }
+
+  /* Added-team base liveries (team 15..20 `Livery`): a car with no per-car Car1/Car2 override
+     shows its team's base BMP. Added-team cars resolve (via the sub_677D0 clamp) to team-14's
+     atlas slot 544, which cartex overwrites per-draw like any other car -- overwrite-in-place, so
+     it survives the pause menu (unlike the old jam-788 registration, which resume dropped). Its
+     carId comes from the override's per-seat number. baked=0 -> the engine still blits the number. */
+  for (team = OV_STOCKTEAMS + 1; team <= OV_TEAMS; team++) {
+    const OvTeam *t = OverrideTeam(team);
+    int s, carId;
+    if (!t || !t->liverySet || !t->livery[0]) continue;
+    for (s = 0; s < 2; s++) {
+      if (!t->drv[s].numSet) continue;
+      carId = t->drv[s].num & 0x3F;
+      if (carId < 1 || carId >= CT_MAXCAR || s_img[carId]) continue;   /* per-car override wins */
+      s_img[carId] = CarTexLoadBmp(t->livery);
+      if (s_img[carId]) { s_baked[carId] = 0; loaded++;
+        sprintf(strbuf, "- CarTex: car%02d <- %s (team%02d base)\n", carId, t->livery, team); LogLine(strbuf); }
     }
   }
   if (loaded < 1) { LogLine("- CarTex: no car images loaded; disabled\n"); return; }
@@ -152,7 +172,7 @@ static int CarTexBuildFromBmp(unsigned char *im, unsigned char *carpal)
 void __near _cdecl AHFCarTexSwap(void)
 {
   unsigned char *car, *atlas, *pal0;
-  int carId, team, palSz, s, pn;
+  int carId, team, snapKey, palSz, s, pn;
   unsigned int jamid, off;
 
   if (!PerCarTextures) return;
@@ -169,7 +189,14 @@ void __near _cdecl AHFCarTexSwap(void)
 
   team = (int)(car[0x25] & 0xFF) - 1;     /* teamNr 1..20 -> 0..19 (engine clamps >=0) */
   if (team < 0) team = 0;
-  if (team >= CT_TEAMS) return;           /* added teams 15..20 resolve their own atlas via word_18330A (carlivery remap) */
+  if (team >= CT_TEAMS) return;
+
+  /* Added teams 15..20 (index >=14) all resolve, via the sub_677D0 clamp, to team-14's atlas
+     (slot 544). They share ONE physical slot + number-cache with real team-14 cars, so the
+     snapshot/restore + cache key is team-14's index (13) -- NOT their own -- else each added team
+     would capture a dirty (already-overwritten) 544 as its "stock" base. The per-car overwrite
+     itself stays keyed by carId. */
+  snapKey = (team >= OV_STOCKTEAMS) ? (OV_STOCKTEAMS - 1) : team;
 
   carId = car[0xA6] & 0x3F;               /* strip player bit7 */
 
@@ -193,19 +220,19 @@ void __near _cdecl AHFCarTexSwap(void)
   palSz = (int)*(unsigned short *)(s_pDesc + off + 0x10);
   if (palSz < 1 || palSz > 256) return;
 
-  /* Snapshot the STOCK atlas image + its 4 sub-palettes + pal_sz once per team (to restore
-     non-override cars; the palette is shared per team, so an override teammate dirties it).
-     Allocate the buffer lazily here on first use. For added teams 15..20 the "stock" atlas is
-     carlivery's registered base, which CarLiverySOS restores to pristine at session start, so
-     this captures the base correctly too. */
-  if (!s_snapped[team]) {
-    if (!s_snap[team]) s_snap[team] = (unsigned char *)malloc(CT_SZ);   /* lazy: only drawn teams */
-    if (s_snap[team]) {
-      memcpy(s_snap[team], atlas, CT_SZ);
-      memcpy(s_snappal[team], pal0, 4 * palSz);
-      s_snapPalSz[team] = palSz;
+  /* Snapshot the STOCK atlas image + its 4 sub-palettes + pal_sz once per snapKey (to restore
+     non-override cars; the palette is shared per slot, so an override car dirties it). Allocate
+     the buffer lazily on first use. Added teams 15..20 share team-14's slot 544 (snapKey 13), so
+     this captures pristine stock-544 once -- taken on whichever of those cars draws first, before
+     any of them overwrites it. */
+  if (!s_snapped[snapKey]) {
+    if (!s_snap[snapKey]) s_snap[snapKey] = (unsigned char *)malloc(CT_SZ);   /* lazy: only drawn teams */
+    if (s_snap[snapKey]) {
+      memcpy(s_snap[snapKey], atlas, CT_SZ);
+      memcpy(s_snappal[snapKey], pal0, 4 * palSz);
+      s_snapPalSz[snapKey] = palSz;
     }
-    s_snapped[team] = 1;
+    s_snapped[snapKey] = 1;
   }
 
   /* First use of this car's override: build its flat palette from the BMP (distinct colours
@@ -223,13 +250,20 @@ void __near _cdecl AHFCarTexSwap(void)
     *(unsigned short *)(s_pDesc + off + 0x10) = (unsigned short)pn;   /* new pal_sz */
     for (s = 0; s < 4; s++) memcpy(pal0 + s * pn, s_carpal[carId], pn);
     memcpy(atlas, s_img[carId], CT_SZ);
-    /* our BMP has its number baked in -> suppress the engine's number blit (force a cache HIT). */
-    if (s_pCache && s_pTeamTab)
-      s_pCache[team] = (car[0xA6] == s_pTeamTab[team*2]) ? 1 : 2;
-  } else if (s_snap[team]) {
-    *(unsigned short *)(s_pDesc + off + 0x10) = (unsigned short)s_snapPalSz[team];  /* restore */
-    memcpy(pal0, s_snappal[team], 4 * s_snapPalSz[team]);
-    memcpy(atlas, s_snap[team], CT_SZ);
+    /* The engine's number-blit cache (unk_D6CC0) is indexed by the car's OWN team (14..19 for
+       added teams), NOT the shared physical slot -- so it must be keyed by `team`, not snapKey,
+       or the suppression misses and the engine re-blits its number (visibly fighting our baked
+       number, LOD/camera-distance dependent). Snapshot/image stay keyed by snapKey (the slot). */
+    if (s_pCache && s_pTeamTab) {
+      if (s_baked[carId])
+        s_pCache[team] = (car[0xA6] == s_pTeamTab[team*2]) ? 1 : 2;  /* number baked in -> suppress the blit */
+      else
+        s_pCache[team] = 0xFF;                                        /* base livery, no number -> let the engine blit it */
+    }
+  } else if (s_snap[snapKey]) {
+    *(unsigned short *)(s_pDesc + off + 0x10) = (unsigned short)s_snapPalSz[snapKey];  /* restore */
+    memcpy(pal0, s_snappal[snapKey], 4 * s_snapPalSz[snapKey]);
+    memcpy(atlas, s_snap[snapKey], CT_SZ);
     if (s_pCache) s_pCache[team] = 0xFF;               /* let the engine blit the stock number */
   }
   /* original sub_65D3B (chained from the asm stub) blits the number for stock cars */

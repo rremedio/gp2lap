@@ -25,7 +25,6 @@
 #include "../sessions.h" // 2026: [Weekend] enable/disable sessions
 #include "../calendar.h" // 2026: [Calendar] variable season length/order
 #include "../roster.h"   // 2026: [Team 15..20] bigger roster (d_anzteams)
-#include "../carlivery.h"// 2026: added-team base body liveries
 #include "../carhelmet.h"// 2026: per-driver custom helmets
 #include "../pitcrew.h"  // 2026: per-team pit-crew colours
 #include "../gridcap.h"  // 2026: small-grid support (AllowSmallGrid)
@@ -738,9 +737,6 @@ void __near _cdecl AHFAfterGp2Init(void)
 
   //--- 2026 --- [Team 15..20] bigger roster: set d_anzteams from the validated added teams ---
   RosterInit();
-
-  //--- 2026 --- added-team base body liveries: load BMPs + install the sub_677D0 remap ---
-  CarLiveryInit();
 
   //--- 2026 --- per-driver custom helmets: install the per-draw helmet-overwrite hook ---
   CarHelmetInit();

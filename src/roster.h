@@ -8,7 +8,7 @@
    26 that race -- no car-struct work (only <=26 are ever instantiated per session).
 
    Driver data (drvdata) and per-team perf (teamphys) fill the 40/20-wide tables for the
-   added teams; their car liveries/helmets are layered on later (see carlivery/carhelmet). Until then,
+   added teams; their car liveries/helmets are layered on later (see cartex/carhelmet). Until then,
    teams 15..20 render with the stock team-14 skin via the sub_677D0 clamp (safe fallback). */
 
 void RosterInit(void);   /* set d_anzteams from OverrideActiveTeams; call after OverrideLoad */

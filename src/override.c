@@ -255,6 +255,14 @@ int OverrideParseFile(const char *path, const unsigned char *tab)
         }
         else { sprintf(strbuf,"- Override: [Team %d] %s ignored (no driver in that slot)\n", team, key); LogLine(strbuf); }
       }
+      else if (slotKey(key,"helmet",&slot)) {           /* per-driver custom helmet BMP (4a.3) */
+        int carId = slotCar(tab, team, slot);
+        if (carId) { copyval(g_car[carId].helmet, val); g_car[carId].helmetSet = 1; nLiv++; }
+        else if (team > OV_STOCKTEAMS) {   /* added team: defer to the seat's Num */
+          copyval(g_team[team-1].carHelmet[slot], val); g_team[team-1].carHelmetSet[slot] = 1; nLiv++;
+        }
+        else { sprintf(strbuf,"- Override: [Team %d] helmet%d ignored (no driver in that slot)\n", team, slot+1); LogLine(strbuf); }
+      }
       else if (ieq(key,"cp1") || ieq(key,"cp2")) {
         int carId = slotCar(tab, team, key[2]-'1');
         unsigned char tr[3];
@@ -337,10 +345,16 @@ int OverrideParseFile(const char *path, const unsigned char *tab)
     for (tm = OV_STOCKTEAMS + 1; tm <= OV_TEAMS; tm++)
       for (sl = 0; sl < 2; sl++) {
         int cid = g_team[tm-1].drv[sl].num;
-        if (g_team[tm-1].carLiverySet[sl] && g_team[tm-1].drv[sl].numSet && cid >= 1 && cid < OV_MAXCAR) {
+        if (!g_team[tm-1].drv[sl].numSet || cid < 1 || cid >= OV_MAXCAR) continue;
+        if (g_team[tm-1].carLiverySet[sl]) {
           strncpy(g_car[cid].livery, g_team[tm-1].carLivery[sl], sizeof(g_car[cid].livery)-1);
           g_car[cid].livery[sizeof(g_car[cid].livery)-1] = 0;
           g_car[cid].liverySet = 1;
+        }
+        if (g_team[tm-1].carHelmetSet[sl]) {
+          strncpy(g_car[cid].helmet, g_team[tm-1].carHelmet[sl], sizeof(g_car[cid].helmet)-1);
+          g_car[cid].helmet[sizeof(g_car[cid].helmet)-1] = 0;
+          g_car[cid].helmetSet = 1;
         }
       }
   }

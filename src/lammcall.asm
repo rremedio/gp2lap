@@ -23,6 +23,7 @@ _TEXT   SEGMENT BYTE PUBLIC USE32 'CODE'
         PUBLIC  GridCapMenuHook_
         PUBLIC  SprintCave_
         PUBLIC  MyBodyJam_
+        PUBLIC  MyHelmetTex_
 
         EXTRN   _GP2_Found              :dword
         EXTRN   _GP2_FoundAdr           :dword
@@ -77,6 +78,8 @@ _TEXT   SEGMENT BYTE PUBLIC USE32 'CODE'
         EXTRN   _TeamLiveryJam          :word
         EXTRN   _pWord18330A            :dword
         EXTRN   _BodyJamOrig            :dword
+        EXTRN   _fpHelmetTexCode        :dword
+        EXTRN   _HelmetTexOrig          :dword
         EXTRN   _CarShapeCarPtr         :dword
         EXTRN   _AILaunchFadeBuckets    :dword
         EXTRN   _TeamMassLbs            :dword
@@ -901,6 +904,23 @@ mbj_done:
                 pop     eax
                 retn
 MyBodyJam_      endp
+
+;-------------------------------------------------------------------
+; 2026 --- 4a.3 per-driver custom helmet remap. Installed (CarHelmetInit,
+; when any driver has a Helmet BMP) over the single call site of sub_67882
+; (IDA 0x67A64), re-pointed here. Runs the stock helmet resolver first (flat
+; addr in _HelmetJamOrig; it sets dword_D8EE0 = the number-box index AND
+; word_18330E = index+545), then for a carId with a registered custom helmet
+; overrides ONLY word_18330E -- number-box index/colour untouched. ESI = car.
+MyHelmetTex_    proc    near
+                pushfd
+                pushad
+                call    dword ptr ds:_fpHelmetTexCode   ; AHFHelmetSwap: overwrite/restore before sub_41D50
+                popad
+                popfd
+                jmp     dword ptr ds:_HelmetTexOrig     ; tail-call original sub_41D50 (rets to caller)
+MyHelmetTex_    endp
+
 
 
 ;-------------------------------------------------------------------

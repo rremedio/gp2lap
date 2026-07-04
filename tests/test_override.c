@@ -70,6 +70,7 @@ static const char *FILETXT =
   "Qual1 = 14000\n"
   "Race1 = 13800\n"
   "car1 = liveries/larrousse_30.bmp\n"  /* per-car, added team: deferred to Num1=30 */
+  "helmet1 = helmets/foitek.bmp\n"      /* per-driver helmet, added team: deferred to Num1=30 */
   "\n"
   "[Team 16]\n"                        /* incomplete (no EngineName/Power) -> stops the count */
   "TeamName = Coloni\n"
@@ -157,6 +158,7 @@ int main(void)
     /* deferred per-car livery resolved onto carId 30 (Num1) */
     c30 = OverrideCar(30);
     CHECK(c30 && c30->liverySet && strcmp(c30->livery, "liveries/larrousse_30.bmp") == 0);
+    CHECK(c30->helmetSet && strcmp(c30->helmet, "helmets/foitek.bmp") == 0);
   }
 
   /* invalid Rounds -> rejected (0 = stock) */

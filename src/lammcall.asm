@@ -879,7 +879,7 @@ MyCockpitColors_ proc    near
 MyCockpitColors_ endp
 
 ;-------------------------------------------------------------------
-; 2026 --- 4a.2 added-team body livery remap. Installed (CarLiveryInit,
+; 2026 --- added-team body livery remap. Installed (CarLiveryInit,
 ; when any added team has a Livery) over the single call site of sub_677D0
 ; (IDA 0x67A5F), re-pointed here. Runs the stock resolver first (flat addr
 ; in _BodyJamOrig), then for a team 15-20 with a registered livery jam-id in
@@ -906,12 +906,12 @@ mbj_done:
 MyBodyJam_      endp
 
 ;-------------------------------------------------------------------
-; 2026 --- 4a.3 per-driver custom helmet remap. Installed (CarHelmetInit,
-; when any driver has a Helmet BMP) over the single call site of sub_67882
-; (IDA 0x67A64), re-pointed here. Runs the stock helmet resolver first (flat
-; addr in _HelmetJamOrig; it sets dword_D8EE0 = the number-box index AND
-; word_18330E = index+545), then for a carId with a registered custom helmet
-; overrides ONLY word_18330E -- number-box index/colour untouched. ESI = car.
+; 2026 --- per-driver custom helmet remap. Installed (CarHelmetInit, when any
+; driver has a Helmet BMP) over the single call site of sub_41D50 (the per-
+; textured-polygon resolver, IDA 0x440B1), re-pointed here. Runs AHFHelmetSwap
+; first (overwrites the resolved stock helmet slot's image+palette in place
+; for a carId with a custom helmet, else restores the stock snapshot), THEN
+; tail-calls the original sub_41D50 so it builds its palette LUT from ours.
 MyHelmetTex_    proc    near
                 pushfd
                 pushad

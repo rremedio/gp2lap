@@ -54,17 +54,17 @@ typedef struct {               /* [Team N], indexed [N-1] */
   unsigned char pitcrew[14]; int pitcrewSet;          /* 14 ramp bases */
   char teamName[13];   int teamNameSet;   /* constructor name, up to 12 chars + NUL */
   char engineName[13]; int engineNameSet; /* engine name, up to 12 chars + NUL */
-  char livery[256];    int liverySet;     /* team base body atlas BMP (4a.2); required for teams 15..20 */
+  char livery[256];    int liverySet;     /* team base body atlas BMP; required for teams 15..20 */
   char carLivery[2][256]; int carLiverySet[2]; /* per-seat Car1/Car2 BMP, DEFERRED for added teams
                                         15..20 (t_CaridTeamTab empty at parse time -> resolved to the
-                                        seat's Num after the file is read; 4a.2b) */
+                                        seat's Num after the file is read) */
   char carHelmet[2][256]; int carHelmetSet[2]; /* per-seat Helmet1/Helmet2 BMP, DEFERRED for added
-                                        teams (same resolution as carLivery; 4a.3) */
+                                        teams (same resolution as carLivery) */
 } OvTeam;
 
 typedef struct {               /* resolved per carId (1..OV_MAXCAR-1) */
   char livery[256]; int liverySet;
-  char helmet[256]; int helmetSet;   /* per-driver custom helmet BMP (4a.3) */
+  char helmet[256]; int helmetSet;   /* per-driver custom helmet BMP */
   unsigned char cp[3]; int cpSet;
 } OvCar;
 
@@ -80,7 +80,7 @@ const OvCar     *OverrideCar(int carId);  /* 1..OV_MAXCAR-1, NULL out of range *
 const OvTrack   *OverrideTrack(int slot1);/* 1..16 (calendar slot), NULL out of range */
 const char      *OverrideBaseDir(void);   /* dir of the loaded override file (with trailing sep), or "" */
 
-/* Roster (4a): number of teams to field = OV_STOCKTEAMS (14, always) + a contiguous run of
+/* Roster: number of teams to field = OV_STOCKTEAMS (14, always) + a contiguous run of
    valid override-added teams 15..20. A new team is VALID only with TeamName + EngineName +
    Power + at least one non-disabled seat carrying Name/Num/Qual/Race; the first incomplete
    or absent team stops the count (later teams are ignored). Drives d_anzteams and bounds the

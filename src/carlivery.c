@@ -180,7 +180,7 @@ void CarLiverySOS(void)
   int i;
   RegisterPass();                                      /* map is wiped per weekend -> re-register */
   /* restore each working atlas to its pristine base so cartex snapshots the base, not a stale
-     per-car livery left over from the previous session's last draw (4a.2b). */
+     per-car livery left over from the previous session's last draw. */
   for (i = 0; i < g_n; i++) {
     if (g_base[i]    && g_img[i]) memcpy(g_img[i], g_base[i], CL_SZ);
     if (g_basePal[i] && g_pal[i]) memcpy(g_pal[i], g_basePal[i], 4 * g_palN[i]);

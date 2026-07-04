@@ -1,7 +1,7 @@
 #ifndef CARLIVERY_H
 #define CARLIVERY_H
 
-/* Phase 4a.2: base car-body liveries for override-added teams 15-20 (stock GP2 only ships
+/* Base car-body liveries for override-added teams 15-20 (stock GP2 only ships
    JAM atlases for the 14 stock teams). Each added team supplies a `Livery = <256x164x8 BMP>`;
    GP2Lap registers it as a new atlas under a free jam-id (573..578) and remaps the team->atlas
    resolver so the added team draws its own body.
@@ -16,7 +16,7 @@
    stub that runs the stock resolver then, for a team 15-20 with a registered livery, overwrites
    word_18330A with its jam-id. Shape stays team-14 (the safe default via the stock clamp).
 
-   Per-CAR liveries for the added teams (Car1/Car2) are 4a.2b (lift cartex's 14-team cap). */
+   Per-CAR liveries for the added teams (Car1/Car2) reuse the per-car cartex path (its 14-team cap lifted to 20). */
 
 void CarLiveryInit(void);   /* init: load BMPs, install the sub_677D0 remap, first register pass */
 void CarLiverySOS(void);    /* session start: idempotent re-register (map is wiped per weekend) */

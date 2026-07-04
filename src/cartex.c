@@ -13,7 +13,7 @@
 #define CT_H      164
 #define CT_SZ     (CT_W * CT_H)      /* 41984 */
 #define CT_MAXCAR 64                 /* carId masked to 0x3F */
-#define CT_TEAMS  20                 /* stock 14 + override-added 15..20 (4a.2b); s_pCache /
+#define CT_TEAMS  20                 /* stock 14 + override-added 15..20; s_pCache /
                                         s_pTeamTab / cockpit tables are all >=20-wide */
 
 unsigned long PerCarTextures = 0;
@@ -169,7 +169,7 @@ void __near _cdecl AHFCarTexSwap(void)
 
   team = (int)(car[0x25] & 0xFF) - 1;     /* teamNr 1..20 -> 0..19 (engine clamps >=0) */
   if (team < 0) team = 0;
-  if (team >= CT_TEAMS) return;           /* added teams 15..20 resolve their own atlas via word_18330A (4a.2 remap) */
+  if (team >= CT_TEAMS) return;           /* added teams 15..20 resolve their own atlas via word_18330A (carlivery remap) */
 
   carId = car[0xA6] & 0x3F;               /* strip player bit7 */
 

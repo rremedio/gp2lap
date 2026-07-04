@@ -255,7 +255,7 @@ int OverrideParseFile(const char *path, const unsigned char *tab)
         }
         else { sprintf(strbuf,"- Override: [Team %d] %s ignored (no driver in that slot)\n", team, key); LogLine(strbuf); }
       }
-      else if (slotKey(key,"helmet",&slot)) {           /* per-driver custom helmet BMP (4a.3) */
+      else if (slotKey(key,"helmet",&slot)) {           /* per-driver custom helmet BMP */
         int carId = slotCar(tab, team, slot);
         if (carId) { copyval(g_car[carId].helmet, val); g_car[carId].helmetSet = 1; nLiv++; }
         else if (team > OV_STOCKTEAMS) {   /* added team: defer to the seat's Num */
@@ -340,7 +340,7 @@ int OverrideParseFile(const char *path, const unsigned char *tab)
   fclose(f);
 
   /* resolve deferred added-team (15..20) per-car liveries: the whole file is read now, so each
-     seat's Num is known -> attach Car1/Car2 to that carId's OvCar (4a.2b). */
+     seat's Num is known -> attach Car1/Car2 to that carId's OvCar. */
   { int tm, sl;
     for (tm = OV_STOCKTEAMS + 1; tm <= OV_TEAMS; tm++)
       for (sl = 0; sl < 2; sl++) {

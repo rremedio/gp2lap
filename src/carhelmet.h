@@ -1,7 +1,7 @@
 #ifndef CARHELMET_H
 #define CARHELMET_H
 
-/* Phase 4a.3: per-driver custom helmet textures. Stock GP2's HELMTS1.JAM holds 28 helmet
+/* Per-driver custom helmet textures. Stock GP2's HELMTS1.JAM holds 28 helmet
    designs (jam-ids 545..572, each a 74x15 REGION of a shared 256-wide atlas); a driver's
    helmet = t_CarNrTeamTab[carId-1] + 545, and added drivers default to helmet #0. A per-seat
    `Helmet1/Helmet2 = <74x15 8bpp BMP>` overrides that driver's helmet.

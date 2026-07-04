@@ -7,7 +7,7 @@
 #include "override.h"       /* OverrideCar / OV_MAXCAR */
 #include "gp2hook.h"        /* dwTrackChecksum */
 
-/* Phase 4a.3 (overwrite-in-place model, like cartex): a driver's helmet = a stock helmet atlas
+/* Custom per-driver helmet textures (overwrite-in-place model, like cartex): a driver's helmet = a stock helmet atlas
    (jam 545..572). We NEVER register a new atlas (that scrambles the UV); instead we overwrite the
    driver's resolved stock helmet slot's image+palette IN PLACE, per-draw, keyed by carId, and
    restore the stock snapshot for a driver without an override -- exactly how cartex overrides a

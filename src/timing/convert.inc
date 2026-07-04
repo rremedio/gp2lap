@@ -26,6 +26,7 @@
 #include "../calendar.h" // 2026: [Calendar] variable season length/order
 #include "../pitcrew.h"  // 2026: per-team pit-crew colours
 #include "../gridcap.h"  // 2026: small-grid support (AllowSmallGrid)
+#include "../jamidcap.h" // 2026: raise the jam-id ceiling (relocate id->descriptor map)
 
 unsigned char *GP2_use_svga = NULL;
 unsigned char *GP2_RaceMode = NULL;
@@ -367,6 +368,11 @@ void __near _cdecl AHFAfterGp2Init(void)
       LogLine(strbuf);
     }
   }
+
+  //--- 2026 --- raise the jam-id ceiling (788 -> 1024) by relocating the id->descriptor map
+  //--- + its two per-id byte arrays, so GP2Lap can register atlases at ids 788+ (a band the
+  //--- stock exe hangs on -> collision-proof vs every stock/custom track). ids 0..787 unchanged.
+  JamIdCapInit();
 
   //--- 2026 --- lift the ~1600-segment (track+pit, ~7km) limit by relocating the segment buffer
   //--- to a larger allocation. The buffer (t_TrackSegs..t_LastSegSpace, followed by the shade LUT)

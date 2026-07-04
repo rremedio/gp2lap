@@ -3,8 +3,9 @@
 
 /* Base car-body liveries for override-added teams 15-20 (stock GP2 only ships
    JAM atlases for the 14 stock teams). Each added team supplies a `Livery = <256x164x8 BMP>`;
-   GP2Lap registers it as a new atlas under a free jam-id (573..578) and remaps the team->atlas
-   resolver so the added team draws its own body.
+   GP2Lap registers it as a new atlas under a free jam-id (788..793 when the jam-id cap has been
+   raised -- the collision-proof zone above the stock 786 max; else a 573..578 fallback) and remaps
+   the team->atlas resolver so the added team draws its own body.
 
    Registration = the "clone-descriptor" path: copy team-14's (jam 544) 32-byte descriptor +
    its two attr-table bytes, then point the copy's image at a GP2Lap-owned index buffer and its

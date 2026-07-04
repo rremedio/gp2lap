@@ -5,13 +5,18 @@
 #include "miscahf.h"        /* IDAtoFlat / IDACodeReftoDataRef */
 #include "basiclog.h"       /* LogLine / strbuf */
 #include "override.h"       /* OverrideTeam / OverrideActiveTeams / OV_STOCKTEAMS */
+#include "jamidcap.h"       /* JamIdCapRaised -- picks the high vs fallback jam-id base */
 #include "svga/svgabmp.h"   /* readstream_svgabmp */
 
 #define CL_W        256
 #define CL_H        164
 #define CL_SZ       (CL_W * CL_H)          /* 41984 */
 #define CL_MAX      6                      /* teams 15..20 */
-#define CL_JAMBASE  573                    /* free jam-id block (roadmap 6-of-573..578) */
+#define CL_JAMBASE_HI 788                  /* preferred: above the stock max (786), inside the JamIdCap
+                                              safe zone (788+ can't be reached by any stock/custom track) */
+#define CL_JAMBASE_LO 573                  /* fallback if the jam-id cap was NOT raised: 573..576 are free,
+                                              but 577/578 collide with RCR3 -- only hits teams 19/20, which
+                                              the driver-select freeze already gates, so acceptable */
 #define CL_CLONEJAM 544                    /* team-14 body atlas: descriptor + attr clone source */
 
 /* --- globals the asm stub MyBodyJam reads (see lammcall.asm) --- */
@@ -31,7 +36,7 @@ static unsigned long  *s_pCount  = 0;      /* dword_184A28 running item count */
 
 /* --- per added-team livery slots --- */
 static int            g_n = 0;
-static int            g_jam[CL_MAX];        /* jam-id = 573 + slot */
+static int            g_jam[CL_MAX];        /* jam-id = jamBase + slot (788 if cap raised, else 573) */
 static unsigned char *g_img[CL_MAX];        /* WORKING index image (cartex overwrites per-car draw) */
 static unsigned char *g_pal[CL_MAX];        /* WORKING 4 sub-palettes x palN */
 static int            g_palN[CL_MAX];
@@ -124,9 +129,12 @@ static int InstallRemap(void)
 void CarLiveryInit(void)
 {
   int team, i;
+  int jamBase = JamIdCapRaised ? CL_JAMBASE_HI : CL_JAMBASE_LO;
 
   for (i = 0; i < 21; i++) TeamLiveryJam[i] = 0;
   g_n = 0;
+  if (!JamIdCapRaised)
+    LogLine("- CarLivery: jam-id cap NOT raised; using fallback base 573 (teams 19/20 may clash with RCR3)\n");
 
   /* load a base livery BMP for each fielded added team (15..active) that set Livery */
   for (team = OV_STOCKTEAMS + 1; team <= OverrideActiveTeams() && g_n < CL_MAX; team++) {
@@ -148,7 +156,7 @@ void CarLiveryInit(void)
     if (g_basePal[g_n]) memcpy(g_basePal[g_n], g_pal[g_n], 4 * pn);
     g_img[g_n]  = img;
     g_palN[g_n] = pn;
-    g_jam[g_n]  = CL_JAMBASE + g_n;
+    g_jam[g_n]  = jamBase + g_n;
     TeamLiveryJam[team] = (unsigned short)g_jam[g_n];
     sprintf(strbuf, "- CarLivery: team%02d body <- %s (jam %d)\n", team, t->livery, g_jam[g_n]); LogLine(strbuf);
     g_n++;
